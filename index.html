@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en" class="is-locked">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Coupon Crows ($CAW) · Collecting shiny returns</title>
+    <meta
+      name="description"
+      content="Coupon Crows is a fictional community art project about the patient collector of the flock: the crow that gathers shiny things, coin by coin."
+    />
+    <meta name="theme-color" content="#020308" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Share cards. Set VITE_SITE_URL in .env so the image URL is absolute. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Coupon Crows" />
+    <meta property="og:title" content="Coupon Crows ($CAW) · Collecting shiny returns" />
+    <meta
+      property="og:description"
+      content="Every flock needs a mascot. Nobody had drawn the crow. So we did. A fictional community art project."
+    />
+    <meta property="og:image" content="%VITE_SITE_URL%/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Coupon Crow mascot, a blue-black crow on a stack of coins with a coin in its beak, next to the words Coupon Crows, collecting shiny returns."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Coupon Crows ($CAW) · Collecting shiny returns" />
+    <meta
+      name="twitter:description"
+      content="Every flock needs a mascot. Nobody had drawn the crow. So we did. A fictional community art project."
+    />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og.png" />
+  </head>
+  <body>
+    <div class="fx fx--glow" aria-hidden="true"></div>
+    <div class="fx fx--grain" aria-hidden="true"></div>
+
+    <!-- ============ 0. Intro gate ============ -->
+    <div class="loader" id="loader" role="dialog" aria-modal="true" aria-label="Coupon Crows intro">
+      <div class="loader__top">
+        <span class="brand"><span class="slashes" aria-hidden="true">//////</span> Coupon Crows</span>
+        <span class="loader__tagline">Collecting shiny returns.</span>
+      </div>
+      <div class="loader__bottom">
+        <div class="loader__count" id="loaderCount" aria-hidden="true">000</div>
+        <div class="loader__panel">
+          <p class="loader__status" id="loaderStatus" role="status">Collecting shiny things…</p>
+          <div class="loader__actions" id="loaderActions" hidden>
+            <button class="btn btn--primary" type="button" data-enter="sound">Enter</button>
+            <button class="btn" type="button" data-enter="silent">Enter without sound</button>
+          </div>
+          <p class="loader__hint">Best with sound · change or mute the music from the corner</p>
+        </div>
+      </div>
+      <div class="loader__bar" aria-hidden="true"><i id="loaderBar"></i></div>
+    </div>
+
+    <div id="site" inert>
+      <header class="topbar">
+        <a class="brand" href="#" id="brandLink" aria-label="Coupon Crows, back to top">
+          <span class="slashes" aria-hidden="true">//////</span> <span class="brand__name">Coupon Crows</span>
+        </a>
+        <div class="topbar__actions">
+          <span class="slot slot--ca" data-ca></span>
+          <span class="slot" data-buy></span>
+        </div>
+      </header>
+
+      <!-- Persistent mascot. Scroll moves it between sections. -->
+      <div class="stage" aria-hidden="true">
+        <div class="mascot" id="mascot">
+          <div class="mascot__halo"></div>
+          <div class="mascot__flip"><div class="mascot__sway"></div></div>
+        </div>
+      </div>
+
+      <main id="main">
+        <!-- ============ 1. Hero ============ -->
+        <section class="hero" id="hero" data-group="The crow" data-pose="hero">
+          <p class="eyebrow hero__eyebrow" data-fade>
+            <span>01 — THE CROW</span><span class="slashes" aria-hidden="true">//////</span
+            ><span>Collecting shiny returns.</span>
+          </p>
+          <h1 class="hero__title" aria-label="Coupon Crow">
+            <span class="hero__word" aria-hidden="true">COUPON</span>
+            <span class="hero__word" aria-hidden="true">CROW</span>
+          </h1>
+          <p class="hero__lede" data-fade>Every flock needs a mascot. Nobody had drawn the crow. So we did.</p>
+          <dl class="hero__meta" data-fade>
+            <div><dt>Ticker</dt><dd>$CAW</dd></div>
+            <div><dt>Status</dt><dd>Drawn, not deployed</dd></div>
+          </dl>
+          <p class="hero__scroll" data-fade>
+            Scroll down to follow the glint
+            <span class="scrollcue" aria-hidden="true"><i></i></span>
+          </p>
+        </section>
+
+        <!-- ============ 2. Lore (chapters rendered from src/content.ts) ============ -->
+        <div class="lore" id="lore" data-group="Lore"></div>
+
+        <!-- ============ 3. The token ============ -->
+        <section class="token" id="token" data-group="The token" data-pose="token" data-reveal>
+          <div class="token__inner">
+            <p class="eyebrow" data-fade>
+              <span>03 — THE TOKEN</span><span class="slashes" aria-hidden="true">//////</span><span>Concept only</span>
+            </p>
+            <h2 class="display">
+              <span class="line"><span class="line__in">HOLD $CAW.</span></span>
+              <span class="line"><span class="line__in">COLLECT</span></span>
+              <span class="line"><span class="line__in">SHINY THINGS.</span></span>
+            </h2>
+            <p class="token__text" data-fade>
+              $CAW is a community token concept: a mascot, a running joke about patience, and a flock that likes
+              things that glitter. There is no contract yet and nothing to buy. When there is, these buttons wake up.
+            </p>
+            <ul class="facts" data-fade>
+              <li><b>What it is</b><span>A crow, a ledger and a lot of memes.</span></li>
+              <li><b>What it isn't</b><span>An investment, a promise or a plan for your rent.</span></li>
+              <li><b>What's next</b><span>A contract address, when the flock is ready.</span></li>
+            </ul>
+            <div class="token__actions" data-fade>
+              <span class="slot" data-buy></span>
+              <span class="slot" data-explorer></span>
+              <span class="slot" data-ca></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ 4. The memes ============ -->
+        <section class="memes" id="memes" data-group="The memes" data-pose="hidden" data-reveal>
+          <header class="memes__head">
+            <p class="eyebrow" data-fade>
+              <span>04 — THE MEMES</span><span class="slashes" aria-hidden="true">//////</span
+              ><span>Made on the wire</span>
+            </p>
+            <h2 class="display">
+              <span class="line"><span class="line__in">CROWS AT WORK.</span></span>
+            </h2>
+          </header>
+          <div
+            class="scene"
+            id="scene"
+            tabindex="0"
+            role="group"
+            aria-roledescription="carousel"
+            aria-label="Meme carousel. Left and right arrow keys turn it one frame."
+          >
+            <div class="scene__tilt">
+              <div class="ring-crow" id="ringCrow"></div>
+              <div class="ring" id="ring"></div>
+            </div>
+          </div>
+          <p class="memes__hint" data-fade>⟵ ⟶ Drag to turn the memes · click one to open it</p>
+        </section>
+
+        <!-- ============ 5. Join the flock ============ -->
+        <section class="join" id="join" data-group="The flock" data-pose="join" data-reveal>
+          <p class="eyebrow" data-fade>
+            <span>05 — THE FLOCK</span><span class="slashes" aria-hidden="true">//////</span><span>Open perch</span>
+          </p>
+          <h2 class="display">
+            <span class="line"><span class="line__in">JOIN THE FLOCK.</span></span>
+          </h2>
+          <p class="join__text" data-fade>Bring a shiny thing or a meme. Ideally both. There's room on the wire.</p>
+          <div class="join__actions" data-fade>
+            <a class="btn btn--primary" data-href="community" href="#">Join the community</a>
+            <a class="btn" data-href="follow" href="#">Follow the flock</a>
+          </div>
+        </section>
+      </main>
+
+      <!-- ============ 6. Footer / token panel ============ -->
+      <footer class="panel" id="panel" data-group="Token panel" data-pose="hidden" data-reveal>
+        <p class="eyebrow" data-fade>
+          <span>06 — TOKEN PANEL</span><span class="slashes" aria-hidden="true">//////</span><span>For the record</span>
+        </p>
+        <div class="panel__ca" data-fade>
+          <span class="panel__label">Contract address</span>
+          <span class="slot" data-ca="full"></span>
+          <span class="slot" data-explorer></span>
+          <span class="slot" data-buy></span>
+        </div>
+        <dl class="stats" id="stats" data-fade></dl>
+        <p class="panel__disclaimer" data-fade>
+          A fictional community art project. Not affiliated with any company. Nothing here is financial advice.
+        </p>
+        <p class="panel__sign" data-fade>
+          <span class="slashes" aria-hidden="true">//////</span> Coupon Crows · drawn by the flock
+        </p>
+      </footer>
+
+      <!-- Persistent corner controls -->
+      <div class="sound" role="group" aria-label="Music">
+        <button class="sound__nav" id="sndPrev" type="button" aria-label="Previous track">‹</button>
+        <span class="sound__name" id="sndName" aria-live="polite">Wire at Dusk</span>
+        <button class="sound__nav" id="sndNext" type="button" aria-label="Next track">›</button>
+        <button class="sound__toggle" id="sndToggle" type="button" aria-pressed="false">
+          <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="sndLabel">Music off</span>
+        </button>
+      </div>
+
+      <div class="progress" aria-hidden="true">
+        <span class="progress__ticks" id="progTicks"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="progress__num"><b id="progNum">01</b> / <span id="progTotal">06</span></span>
+        <span class="progress__name" id="progName">The crow</span>
+      </div>
+    </div>
+
+    <dialog class="lightbox" id="lightbox" aria-label="Meme viewer">
+      <div class="lightbox__inner">
+        <button class="btn lightbox__close" id="lightboxClose" type="button">Close ✕</button>
+        <div class="lightbox__stage" id="lightboxStage"></div>
+        <div class="lightbox__bar">
+          <button class="btn" id="lightboxPrev" type="button" aria-label="Previous meme">⟵</button>
+          <span id="lightboxCaption"></span>
+          <button class="btn" id="lightboxNext" type="button" aria-label="Next meme">⟶</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
