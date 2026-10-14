@@ -5,7 +5,7 @@ import { lite } from './lite'
  * Corner overlay for testing on real devices. Loaded only when the URL has
  * ?debug, so it costs nothing otherwise.
  */
-export function initDebug() {
+export function initDebug(scene: () => string) {
   const el = document.createElement('pre')
   el.className = 'debug'
   el.setAttribute('aria-hidden', 'true')
@@ -32,6 +32,7 @@ export function initDebug() {
       `LITE   ${lite.on ? 'ON' : 'off'} · ${lite.reason}`,
       `AUDIO  ${audio.context} · ${audio.session}`,
       `TRACK  ${audio.track}${audio.muted ? ' (muted)' : ''}`,
+      `SCENE  ${scene()}`,
     ].join('\n')
   }
 

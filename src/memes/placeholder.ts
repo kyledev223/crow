@@ -1,19 +1,19 @@
 /**
- * Placeholder meme cards, generated as inline SVG so they use the page fonts.
- * Delete this file's entries from index.ts once real images are in.
+ * Placeholder meme cards, drawn on a canvas so they can be used both as
+ * textures on the 3D ring and as images in the lightbox. They use the page
+ * fonts, so draw them only after the fonts have loaded.
  */
 interface Scheme {
   bg: string
   fg: string
   acc: string
-  dim: string
 }
 
 const SCHEMES: Scheme[] = [
-  { bg: '#050818', fg: '#EDEEF2', acc: '#2F7BFF', dim: '#18244D' },
-  { bg: '#2F7BFF', fg: '#020308', acc: '#EDEEF2', dim: '#1F5FD6' },
-  { bg: '#EDEEF2', fg: '#020308', acc: '#2F7BFF', dim: '#C9D1E4' },
-  { bg: '#0B1B45', fg: '#EDEEF2', acc: '#7FB0FF', dim: '#16306E' },
+  { bg: '#050818', fg: '#EDEEF2', acc: '#2F7BFF' },
+  { bg: '#2F7BFF', fg: '#020308', acc: '#EDEEF2' },
+  { bg: '#EDEEF2', fg: '#020308', acc: '#2F7BFF' },
+  { bg: '#0B1B45', fg: '#EDEEF2', acc: '#7FB0FF' },
 ]
 
 type Motif = 'wire' | 'coin' | 'eye' | 'stack' | 'head'
@@ -25,82 +25,147 @@ export interface PlaceholderSpec {
   scheme: number
 }
 
-const star = (x: number, y: number, r: number, fill: string) =>
-  `<path d="M${x} ${y - r} l${r * 0.28} ${r * 0.72} ${r * 0.72} ${r * 0.28} -${r * 0.72} ${r * 0.28} -${r * 0.28} ${r * 0.72} -${r * 0.28} -${r * 0.72} -${r * 0.72} -${r * 0.28} ${r * 0.72} -${r * 0.28} Z" fill="${fill}"/>`
+type Ctx = CanvasRenderingContext2D
+
+const fill = (c: Ctx, d: string, color: string) => {
+  c.fillStyle = color
+  c.fill(new Path2D(d))
+}
+const disc = (c: Ctx, x: number, y: number, r: number, color: string) => {
+  c.fillStyle = color
+  c.beginPath()
+  c.arc(x, y, r, 0, Math.PI * 2)
+  c.fill()
+}
+const ring = (c: Ctx, x: number, y: number, r: number, color: string, width: number) => {
+  c.strokeStyle = color
+  c.lineWidth = width
+  c.beginPath()
+  c.arc(x, y, r, 0, Math.PI * 2)
+  c.stroke()
+}
+
+function star(c: Ctx, x: number, y: number, r: number, color: string) {
+  const a = r * 0.28
+  c.fillStyle = color
+  c.beginPath()
+  c.moveTo(x, y - r)
+  c.lineTo(x + a, y - a)
+  c.lineTo(x + r, y)
+  c.lineTo(x + a, y + a)
+  c.lineTo(x, y + r)
+  c.lineTo(x - a, y + a)
+  c.lineTo(x - r, y)
+  c.lineTo(x - a, y - a)
+  c.fill()
+}
 
 /** Small crow silhouette; (x, y) is where the feet touch down. */
-const bird = (x: number, y: number, s: number, fill: string, eye: string) => `
-  <g transform="translate(${x} ${y}) scale(${s})" fill="${fill}">
-    <path d="M-14 -20 L-58 -2 L-48 8 L-6 -8 Z"/>
-    <ellipse cx="0" cy="-26" rx="27" ry="20" transform="rotate(-22 0 -26)"/>
-    <circle cx="19" cy="-52" r="16"/>
-    <path d="M31 -60 L60 -50 L31 -43 Z"/>
-    <path d="M-6 -8 v8 M8 -8 v8" stroke="${fill}" stroke-width="4" stroke-linecap="round"/>
-    <circle cx="24" cy="-55" r="4" fill="${eye}"/>
-  </g>`
+function bird(c: Ctx, x: number, y: number, s: number, color: string, eye: string, flip = false) {
+  c.save()
+  c.translate(x, y)
+  c.scale(flip ? -s : s, s)
+  fill(c, 'M-14 -20 L-58 -2 L-48 8 L-6 -8 Z', color)
+  c.save()
+  c.translate(0, -26)
+  c.rotate((-22 * Math.PI) / 180)
+  c.beginPath()
+  c.ellipse(0, 0, 27, 20, 0, 0, Math.PI * 2)
+  c.fill()
+  c.restore()
+  disc(c, 19, -52, 16, color)
+  fill(c, 'M31 -60 L60 -50 L31 -43 Z', color)
+  c.fillRect(-8, -8, 4, 9)
+  c.fillRect(6, -8, 4, 9)
+  disc(c, 24, -55, 4, eye)
+  c.restore()
+}
 
-function art(motif: Motif, c: Scheme): string {
+function art(c: Ctx, motif: Motif, s: Scheme) {
   switch (motif) {
     case 'wire':
-      return `
-        <path d="M-10 318 Q200 348 410 318" fill="none" stroke="${c.fg}" stroke-width="4"/>
-        ${bird(96, 326, 1.15, c.fg, c.acc)}
-        ${bird(206, 334, 1.5, c.fg, c.acc)}
-        <g transform="translate(640 0) scale(-1 1)">${bird(322, 328, 1.05, c.fg, c.acc)}</g>
-        ${star(318, 196, 26, c.acc)}`
+      c.strokeStyle = s.fg
+      c.lineWidth = 4
+      c.beginPath()
+      c.moveTo(-10, 318)
+      c.quadraticCurveTo(200, 348, 410, 318)
+      c.stroke()
+      bird(c, 96, 326, 1.15, s.fg, s.acc)
+      bird(c, 206, 334, 1.5, s.fg, s.acc)
+      bird(c, 318, 328, 1.05, s.fg, s.acc, true)
+      star(c, 318, 196, 26, s.acc)
+      break
     case 'coin':
-      return `
-        <circle cx="200" cy="286" r="112" fill="${c.fg}"/>
-        <circle cx="200" cy="286" r="88" fill="none" stroke="${c.acc}" stroke-width="5"/>
-        <text x="200" y="312" text-anchor="middle" font-size="76" fill="${c.bg}">CAW</text>
-        ${star(292, 196, 40, c.acc)}`
+      disc(c, 200, 286, 112, s.fg)
+      ring(c, 200, 286, 88, s.acc, 5)
+      c.fillStyle = s.bg
+      c.textAlign = 'center'
+      c.font = '76px Anton, Impact, sans-serif'
+      c.fillText('CAW', 200, 313)
+      c.textAlign = 'left'
+      star(c, 292, 196, 40, s.acc)
+      break
     case 'eye':
-      return `
-        <circle cx="200" cy="290" r="118" fill="${c.fg}"/>
-        <circle cx="212" cy="294" r="72" fill="${c.acc}"/>
-        <circle cx="218" cy="296" r="36" fill="${c.bg}"/>
-        <circle cx="238" cy="270" r="13" fill="${c.fg}"/>
-        <path d="M60 180 L340 232 L340 196 L60 150 Z" fill="${c.bg}"/>`
-    case 'stack': {
-      const heights = [1, 2, 4, 6]
-      const stacks = heights
-        .map((h, i) =>
-          Array.from({ length: h }, (_, j) => {
-            const x = 74 + i * 84
-            const y = 396 - j * 24
-            return `<rect x="${x - 34}" y="${y - 18}" width="68" height="18" rx="5" fill="${j % 2 ? c.acc : c.fg}"/>`
-          }).join(''),
-        )
-        .join('')
-      return `${stacks}${bird(326, 256, 1.05, c.fg, c.acc)}`
-    }
+      disc(c, 200, 290, 118, s.fg)
+      disc(c, 212, 294, 72, s.acc)
+      disc(c, 218, 296, 36, s.bg)
+      disc(c, 238, 270, 13, s.fg)
+      fill(c, 'M60 180 L340 232 L340 196 L60 150 Z', s.bg)
+      break
+    case 'stack':
+      ;[1, 2, 4, 6].forEach((n, i) => {
+        for (let j = 0; j < n; j++) {
+          c.fillStyle = j % 2 ? s.acc : s.fg
+          c.beginPath()
+          c.roundRect(74 + i * 84 - 34, 396 - j * 24 - 18, 68, 18, 5)
+          c.fill()
+        }
+      })
+      bird(c, 326, 256, 1.05, s.fg, s.acc)
+      break
     case 'head':
-      return `
-        <circle cx="96" cy="300" r="150" fill="${c.fg}"/>
-        <path d="M206 232 Q318 250 372 306 L214 318 Z" fill="${c.fg}"/>
-        <path d="M216 326 L330 322 L220 356 Z" fill="${c.fg}"/>
-        <circle cx="352" cy="318" r="30" fill="${c.acc}"/>
-        <circle cx="352" cy="318" r="18" fill="none" stroke="${c.bg}" stroke-width="3"/>
-        <circle cx="150" cy="262" r="30" fill="${c.bg}"/>
-        <circle cx="156" cy="264" r="15" fill="${c.acc}"/>
-        ${star(382, 268, 22, c.acc)}`
+      disc(c, 96, 300, 150, s.fg)
+      fill(c, 'M206 232 Q318 250 372 306 L214 318 Z', s.fg)
+      fill(c, 'M216 326 L330 322 L220 356 Z', s.fg)
+      disc(c, 352, 318, 30, s.acc)
+      ring(c, 352, 318, 18, s.bg, 3)
+      disc(c, 150, 262, 30, s.bg)
+      disc(c, 156, 264, 15, s.acc)
+      star(c, 382, 268, 22, s.acc)
+      break
   }
 }
 
-export function placeholderSvg(spec: PlaceholderSpec, n: number): string {
-  const c = SCHEMES[spec.scheme % SCHEMES.length]
-  const id = String(n).padStart(2, '0')
-  const top = spec.top
-    .map((line, i) => `<text x="24" y="${102 + i * 56}" font-size="56" fill="${c.fg}">${line}</text>`)
-    .join('')
-  return `
-<svg viewBox="0 0 400 500" role="img" aria-label="${[...spec.top, spec.bottom].join(' ')}" preserveAspectRatio="xMidYMid slice" font-family="Anton, Impact, sans-serif">
-  <rect width="400" height="500" fill="${c.bg}"/>
-  <g>${art(spec.motif, c)}</g>
-  <text x="24" y="38" font-family="'JetBrains Mono', monospace" font-size="13" letter-spacing="1" fill="${c.fg}" opacity=".7">////// CAW-${id}</text>
-  ${top}
-  <rect x="0" y="424" width="400" height="76" fill="${c.bg}"/>
-  <rect x="24" y="424" width="352" height="2" fill="${c.fg}" opacity=".35"/>
-  <text x="24" y="468" font-size="27" fill="${c.fg}">${spec.bottom}</text>
-</svg>`
+/** Draws one 4:5 card. `n` is its 1-based number, shown as CAW-0n. */
+export function drawPlaceholder(spec: PlaceholderSpec, n: number): HTMLCanvasElement {
+  const scale = 2
+  const canvas = document.createElement('canvas')
+  canvas.width = 400 * scale
+  canvas.height = 500 * scale
+  const c = canvas.getContext('2d')!
+  c.scale(scale, scale)
+  const s = SCHEMES[spec.scheme % SCHEMES.length]
+
+  c.fillStyle = s.bg
+  c.fillRect(0, 0, 400, 500)
+  art(c, spec.motif, s)
+
+  c.fillStyle = s.fg
+  c.globalAlpha = 0.7
+  c.font = '500 13px "JetBrains Mono", monospace'
+  c.fillText(`////// CAW-${String(n).padStart(2, '0')}`, 24, 38)
+  c.globalAlpha = 1
+
+  c.font = '56px Anton, Impact, sans-serif'
+  spec.top.forEach((line, i) => c.fillText(line, 24, 102 + i * 56))
+
+  c.fillStyle = s.bg
+  c.fillRect(0, 424, 400, 76)
+  c.fillStyle = s.fg
+  c.globalAlpha = 0.35
+  c.fillRect(24, 424, 352, 2)
+  c.globalAlpha = 1
+  c.font = '27px Anton, Impact, sans-serif'
+  c.fillText(spec.bottom, 24, 468)
+  return canvas
 }

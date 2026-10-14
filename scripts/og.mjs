@@ -5,8 +5,6 @@
  *
  *   public/og.png                1200×630, mascot + headline in the site style
  *   public/apple-touch-icon.png  180×180, from public/favicon.svg
- *   public/frame-back-soft.png   pre-blurred back of a carousel card (see the
- *                                depth note in src/style.css)
  *
  * The mascot comes straight from src/crow-art.ts, so the image always matches
  * the site. Text is converted to outlines from the bundled fonts, which keeps
@@ -26,7 +24,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 try {
   await generate()
 } catch (err) {
-  const have = ['og.png', 'apple-touch-icon.png', 'frame-back-soft.png'].every((f) => existsSync(resolve(root, 'public', f)))
+  const have = ['og.png', 'apple-touch-icon.png'].every((f) => existsSync(resolve(root, 'public', f)))
   if (!process.argv.includes('--optional') || !have) throw err
   console.warn(`og.mjs: could not regenerate images (${err.message}). Using the existing files in public/.`)
 }
@@ -110,21 +108,5 @@ async function generate() {
       background: BG,
     }),
   )
-  // The back of a meme card, blurred. Keep the colours in step with
-  // .frame__back-sharp in src/style.css. The 12-unit margin leaves room for the
-  // blur to spread; the CSS insets the layer by the same proportion.
-  const cardBack = `
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 224 274">
-    <defs>
-      <linearGradient id="g" x1="0" y1="0" x2=".6" y2="1"><stop stop-color="#0d1a40"/><stop offset="1" stop-color="#04060f"/></linearGradient>
-      <filter id="b" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2.6"/></filter>
-    </defs>
-    <g filter="url(#b)">
-      <rect width="200" height="250" rx="3" fill="url(#g)" stroke="${INK}" stroke-opacity=".28"/>
-      <path d="M79 133l6-16M87 133l6-16M95 133l6-16M103 133l6-16M111 133l6-16M119 133l6-16" stroke="${ACCENT}" stroke-width="1.6"/>
-    </g>
-  </svg>`
-  writeFileSync(resolve(root, 'public/frame-back-soft.png'), png(cardBack, { fitTo: { mode: 'width', value: 336 } }))
-
-  console.log('wrote public/og.png (1200×630) public/apple-touch-icon.png (180×180) and public/frame-back-soft.png')
+  console.log('wrote public/og.png (1200×630) and public/apple-touch-icon.png (180×180)')
 }

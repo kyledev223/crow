@@ -16,6 +16,8 @@ export interface SiteConfig {
   buyUrl: string | null
   /** Where "Explorer" goes. `null` = disabled placeholder. */
   explorerUrl: string | null
+  /** Video for the keynote lightbox (screen 3). `null` = placeholder slot. */
+  stageVideoUrl: string | null
   /** "Join the flock" links. "#" is an inert placeholder. */
   communityUrl: string
   followUrl: string
@@ -28,6 +30,7 @@ export const config: SiteConfig = {
   contractAddress: null,
   buyUrl: null,
   explorerUrl: null,
+  stageVideoUrl: null,
   communityUrl: '#',
   followUrl: '#',
   stats: [
