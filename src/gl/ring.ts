@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { Meme } from '../memes'
-import { canvasTexture } from './kit'
+import { canvasTexture } from './plate'
 
 const AUTO_SPEED = -4.5 // deg per second while idle
 const DRAG_SENS = 0.28 // deg per px
@@ -128,7 +128,7 @@ export function createRing(memes: Meme[], reduced: boolean) {
       // Frames dim as they turn away, on top of what the lighting already does.
       faces.forEach((f, i) => {
         const facing = Math.cos((i * step + rot) * RAD)
-        ;(f.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.12 + 0.5 * Math.max(0, facing) ** 1.5
+        ;(f.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25 + 0.85 * Math.max(0, facing) ** 1.5
       })
     },
 

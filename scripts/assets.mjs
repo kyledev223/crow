@@ -1,6 +1,12 @@
 /**
- * `npm run assets`: turns the images in assets-raw/ into transparent cutouts
- * in public/assets/crow/ (background removed, trimmed, max 2048px).
+ * `npm run assets`: prepares everything in assets-raw/ for the site.
+ *
+ *   crow-*.png   -> transparent cutouts in public/assets/crow/
+ *   bg-NN.png    -> backplates + depth maps in public/assets/bg/
+ *   walk.mp4     -> keyed, looped walk cycle in public/assets/crow/
+ *
+ * See scripts/assets.py for the details. Outputs that are already up to date
+ * are skipped; `npm run assets -- --force` redoes everything.
  *
  * The work is done by rembg, a Python tool. To keep it away from the rest of
  * your system, this script builds a private Python environment in
@@ -15,7 +21,9 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const raw = join(root, 'assets-raw')
 const out = join(root, 'public', 'assets', 'crow')
+const outBg = join(root, 'public', 'assets', 'bg')
 const venv = join(root, '.venv-assets')
+const models = join(venv, 'models')
 const venvPython = process.platform === 'win32' ? join(venv, 'Scripts', 'python.exe') : join(venv, 'bin', 'python')
 
 const EXPECTED = ['crow-hero', 'crow-seated', 'crow-stage', 'crow-phone', 'crow-toast', 'crow-laptop', 'crow-coin']
@@ -31,7 +39,7 @@ mkdirSync(raw, { recursive: true })
 if (!readdirSync(raw).some((f) => /\.(png|jpe?g|webp|bmp|tiff?|mp4|webm)$/i.test(f))) {
   console.log(`\nassets-raw/ is empty. Drop your source images in there, named for the slot they fill:\n`)
   for (const name of EXPECTED) console.log(`  ${name}.png   (or .jpg / .webp)`)
-  console.log(`  walk.mp4        (walk cycle on solid green; copied as is)\n\nThen run "npm run assets" again.\n`)
+  console.log(`  walk.mp4        (walk cycle on solid green)\n  bg-01.png … bg-12.png   (one backplate per screen)\n\nThen run "npm run assets" again.\n`)
   process.exit(0)
 }
 
@@ -80,11 +88,18 @@ if (quiet(venvPython, ['-c', 'import rembg, PIL, onnxruntime']).status !== 0) {
   }
 }
 
-// ---- 3. cut out ---------------------------------------------------------------------
-console.log(`\nassets-raw/  →  public/assets/crow/\n`)
-const done = run(venvPython, [join(root, 'scripts', 'assets.py'), raw, out])
-if (done.status !== 0) fail('Background removal failed. The message above says why.')
+// ---- 3. ffmpeg, for the walk cycle -------------------------------------------------------
+if (existsSync(join(raw, 'walk.mp4')) && quiet('ffmpeg', ['-version']).status !== 0) {
+  console.log('\nNote: ffmpeg was not found, so walk.mp4 will be copied without processing (no loop fix, no')
+  console.log('watermark crop, shader keying only). Install it from https://ffmpeg.org/download.html to fix that.\n')
+}
+
+// ---- 4. process ----------------------------------------------------------------------------
+console.log(`\nassets-raw/  →  public/assets/\n`)
+const extra = process.argv.includes('--force') ? ['--force'] : []
+const done = run(venvPython, [join(root, 'scripts', 'assets.py'), raw, out, outBg, models, ...extra])
+if (done.status !== 0) fail('Asset processing failed. The message above says why.')
 
 const have = new Set(readdirSync(out))
-const missing = [...EXPECTED.map((n) => n + '.png'), 'walk.mp4'].filter((f) => !have.has(f))
+const missing = [...EXPECTED.map((n) => n + '.png'), 'walk.webm'].filter((f) => !have.has(f))
 console.log(missing.length ? `\nStill missing (the site shows a labelled placeholder for these): ${missing.join(', ')}\n` : '\nAll expected assets are present.\n')

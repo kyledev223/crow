@@ -10,24 +10,24 @@ const STATUS = [
 
 export interface BootOptions {
   reduced: boolean
-  /** Resolves with the engine once the 3D scenes are built and rendering. */
+  /** Resolves with the engine once every scene is built and warmed up. */
   ready: Promise<Engine>
-  /** The hero scene is now on screen behind the entry buttons. */
-  onReveal(): void
   /** Runs inside the click, so audio is allowed to start. */
   onEnter(withSound: boolean): void
+  /** The visitor has arrived on screen 01. */
+  onArrive(): void
 }
 
 /**
- * Loader → CRT flip → interactive entry screen.
+ * Loader → particle entry → site.
  *
- * 1. Counts 000 → 100 over heavy static.
- * 2. The picture collapses to a bright line and springs back open on the
- *    live hero scene (parallax and the cursor lens already work).
- * 3. "Enter" / "Enter without sound" wait there. Scrolling stays locked
- *    until one is chosen.
+ * 1. Brand, a big 000 → 100 counter and a status line, on black.
+ * 2. At 100 the loader fades away over the live particle field: a glowing
+ *    sphere, "Enter" / "Enter without sound". Scrolling stays locked.
+ * 3. On Enter the camera flies through the sphere and the first screen
+ *    comes up out of the flash.
  */
-export function runBoot({ reduced, ready, onReveal, onEnter }: BootOptions) {
+export function runBoot({ reduced, ready, onEnter, onArrive }: BootOptions) {
   const root = document.documentElement
   const boot = document.getElementById('boot')!
   const count = document.getElementById('bootCount')!
@@ -52,39 +52,21 @@ export function runBoot({ reduced, ready, onReveal, onEnter }: BootOptions) {
     })
   })
 
-  const reveal = () => {
-    boot.remove()
+  let engine: Engine
+  Promise.all([ready, counted]).then(([e]) => {
+    engine = e
     root.classList.remove('is-booting')
+    root.classList.add('is-entry')
     entry.hidden = false
-    onReveal()
-    if (!reduced) gsap.from(entry.children, { y: 16, autoAlpha: 0, duration: 0.5, stagger: 0.08, ease: 'power3.out', delay: 0.25 })
+    gsap.to(boot, { autoAlpha: 0, duration: reduced ? 0.3 : 0.9, ease: 'power2.inOut', onComplete: () => boot.remove() })
+    if (!reduced) gsap.from(entry.children, { y: 18, autoAlpha: 0, duration: 0.7, stagger: 0.1, ease: 'power3.out', delay: 0.5 })
     entry.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
-  }
-
-  Promise.all([ready, counted]).then(([engine]) => {
-    const state = engine.state
-    if (reduced) {
-      state.boot = 0
-      return reveal()
-    }
-    gsap
-      .timeline()
-      .to(boot, { autoAlpha: 0, duration: 0.16 }, 0)
-      // collapse to a line…
-      .to(state, { crtY: 0.006, duration: 0.24, ease: 'power3.in' }, 0)
-      .to(state, { crtX: 0.3, duration: 0.16, ease: 'power2.in' }, 0.2)
-      // …swap the static for the scene while it is too thin to see…
-      .set(state, { boot: 0 })
-      .call(reveal)
-      // …and spring back open.
-      .to(state, { crtX: 1, duration: 0.2, ease: 'power2.out' }, '+=0.06')
-      .to(state, { crtY: 1, duration: 0.5, ease: 'expo.out' }, '<0.06')
   })
 
   let entered = false
-  entry.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-enter]')
-    if (!btn || entered) return
+  entry.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('button[data-enter]')
+    if (!btn || entered || !engine) return
     entered = true
     // Whatever goes wrong in there, the gate still opens.
     try {
@@ -92,6 +74,30 @@ export function runBoot({ reduced, ready, onReveal, onEnter }: BootOptions) {
     } catch (err) {
       console.error(err)
     }
-    gsap.to(entry, { autoAlpha: 0, y: 12, duration: reduced ? 0.01 : 0.35, onComplete: () => entry.remove() })
+    const arrive = () => {
+      root.classList.remove('is-entry')
+      entry.remove()
+      onArrive()
+    }
+    gsap.to(entry, { autoAlpha: 0, duration: 0.35 })
+    if (reduced) {
+      engine.showSite()
+      engine.state.fade = 1
+      gsap.to(engine.state, { fade: 0, duration: 0.4, onComplete: arrive })
+      return
+    }
+    // Fly through the sphere, white out, and come up on screen 01.
+    const fly = engine.entry.state
+    gsap
+      .timeline()
+      .to(fly, { fly: 1, duration: 1.35, ease: 'power3.in' }, 0)
+      .to(fly, { zoom: 1, duration: 1.15, ease: 'power2.in' }, 0.15)
+      .to(fly, { flash: 1, duration: 0.22, ease: 'power1.in' }, 1.15)
+      .call(() => {
+        engine.showSite()
+        engine.state.fade = 1
+      })
+      .to(engine.state, { fade: 0, duration: 0.9, ease: 'power2.out' })
+      .call(arrive, [], '-=0.5')
   })
 }

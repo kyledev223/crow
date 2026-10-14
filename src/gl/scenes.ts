@@ -1,16 +1,33 @@
 import * as THREE from 'three'
-import { walkVideo } from '../assets'
+import { crows, hasPose, plateMap, walk, type CrowKey } from '../assets'
 import type { Stage } from './engine'
-import { BLUE, INK, M, ball, box, canvasTexture, coin, coinStack, crow, cyl, glow, ground, haze, mat, panel, rig, seeded } from './kit'
+import {
+  canvasTexture,
+  dust,
+  placeCrow,
+  placeWalker,
+  plateMesh,
+  plateQuad,
+  plateSpace,
+  screenMaterial,
+  seeded,
+  type CrowLight,
+  type CrowPlacement,
+  type PlateLook,
+  type PlateSpace,
+} from './plate'
 import type { Ring } from './ring'
 
 /**
- * The twelve scenes, in page order. Everything is blockout geometry with PBR
- * materials; the lighting and the pixel filter do the rest. Each builder
- * returns a Stage: a scene, a camera move, and an optional per-frame update.
+ * The twelve scenes, in page order. Each one is a photo backplate rebuilt in
+ * 3D from its depth map (plate.ts), the crow composited onto its floor, dust
+ * that catches the light, and live layers only where they add life.
+ *
+ * Positions are in photo coordinates: u across, v down, both 0–1. To move
+ * the crow, change `feet` (where his soles touch the floor) and `height`
+ * (fraction of the frame he fills).
  */
 export interface SceneDeps {
-  env: THREE.Texture
   ring: Ring
   openVideo(): void
   openMeme(index: number): void
@@ -19,841 +36,577 @@ export interface SceneDeps {
 const MONO = '"JetBrains Mono", monospace'
 const ANTON = 'Anton, Impact, sans-serif'
 
-/** Night skyline: dark towers with a scatter of lit windows. */
-const cityTexture = () =>
-  canvasTexture(768, 384, (c, w, h) => {
-    const sky = c.createLinearGradient(0, 0, 0, h)
-    sky.addColorStop(0, '#04060f')
-    sky.addColorStop(1, '#0d1a40')
-    c.fillStyle = sky
-    c.fillRect(0, 0, w, h)
-    const r = seeded(11)
-    for (let x = 0; x < w; ) {
-      const bw = 24 + r() * 60
-      const bh = 60 + r() * 250
-      c.fillStyle = '#05070f'
-      c.fillRect(x, h - bh, bw, bh)
-      for (let wy = h - bh + 8; wy < h - 6; wy += 11) {
-        for (let wx = x + 5; wx < x + bw - 6; wx += 9) {
-          if (r() < 0.3) {
-            c.fillStyle = r() < 0.3 ? '#edeef2' : '#2f7bff'
-            c.globalAlpha = 0.35 + r() * 0.65
-            c.fillRect(wx, wy, 4, 6)
-          }
-        }
-      }
-      c.globalAlpha = 1
-      x += bw + 2
-    }
-  })
+interface Base {
+  scene: THREE.Scene
+  space: PlateSpace
+  plate: THREE.Mesh
+  set(name: string, value: unknown): void
+  tick(time: number): void
+}
 
-// ---------------------------------------------------------------------------
-// 01 THE CROW: centre stage, one spotlight, haze, gold on the floor
-// ---------------------------------------------------------------------------
-function hero({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [0, 7.5, 2.6], aim: [0, 0.9, 0], keyPower: 9, keyAngle: 0.4, rim: [-3, 3.6, -4.5], rimPower: 12, ambient: 0.25, fog: 0.05 })
-  ground(s)
-  box(s, 30, 12, 0.3, M.wall(), 0, 6, -8)
-  crow(s, 'hero', { h: 2.15 })
-  const beam = haze(s, [0, 7.5, 2.6], [0, 0, 0], 1.9, 0xdfe8ff, 0.11)
-
-  const gold = M.gold()
-  const r = seeded(7)
-  for (let i = 0; i < 54; i++) {
-    const a = r() * Math.PI * 2
-    const d = 0.75 + r() * 3.4
-    const x = Math.cos(a) * d
-    const z = Math.sin(a) * d * 0.8 + 0.3
-    if (r() < 0.2) coinStack(s, gold, x, 0, z, 2 + Math.floor(r() * 7))
-    else {
-      const c = coin(s, gold, x, 0.012, z)
-      // a few caught on edge, mid-roll
-      if (r() < 0.12) {
-        c.rotation.z = Math.PI / 2
-        c.rotation.y = r() * 3
-        c.position.y = 0.11
-      } else c.rotation.z = (r() - 0.5) * 0.12
-    }
-  }
+function base(id: string, near: number, far: number, look: PlateLook = {}, dustAmount = 0.55): Base {
+  const space = plateSpace(plateMap.get(id)!, near, far)
+  const scene = new THREE.Scene()
+  scene.background = new THREE.Color('#020308')
+  const plate = plateMesh(space, look)
+  scene.add(plate)
+  const motes = dust(space, 650, dustAmount)
+  scene.add(motes)
+  const pu = (plate.material as THREE.ShaderMaterial).uniforms
+  const du = (motes.material as THREE.ShaderMaterial).uniforms
   return {
-    scene: s,
-    cam: { from: [0, 1.75, 7.4], to: [0, 1.6, 5.3], look: [0, 1.55, 0], fov: 38 },
-    focus: [0, 1.1, 0],
-    rise: -0.12,
-    update: (t) => ((beam.material as THREE.ShaderMaterial).uniforms.uStrength.value = 0.11 + Math.sin(t * 1.7) * 0.012),
+    scene,
+    space,
+    plate,
+    set: (name, value) => (pu[name].value = value),
+    tick(t) {
+      pu.uTime.value = t
+      du.uTime.value = t
+    },
   }
 }
 
-// ---------------------------------------------------------------------------
-// 02 WHY THE NAME: dim office, desk lamp, city in the window
-// ---------------------------------------------------------------------------
-function office({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [1.8, 4.6, 3.4], aim: [0, 0.9, 0], keyPower: 3, rim: [3.5, 3, -2.4], rimPower: 8, ambient: 0.3 })
-  ground(s, mat(0x0c0d14, 0.6, 0.05))
-  box(s, 16, 7, 0.2, M.wall(), 0, 3.5, -3.1)
+/**
+ * The crow in his pose for this screen. If that pose's file doesn't exist
+ * yet he stands in as crow-hero; for seated scenes that means standing
+ * beside the chair (`standing`) instead of in it (`seated`).
+ */
+function addCrow(b: Base, pose: CrowKey, standing: CrowPlacement, light: CrowLight, seated?: CrowPlacement, shadow = true) {
+  const real = pose === 'hero' || hasPose(pose)
+  const key: CrowKey = real ? pose : 'hero'
+  const where = real && seated ? seated : standing
+  const c = placeCrow(b.space, key, where, light)
+  b.scene.add(c.mesh)
+  b.set('uFocusZ', c.z * 1.25)
+  if (shadow) contactShadow(b, where, crows[key].aspect)
+  return c
+}
 
-  // window
-  panel(s, 5.2, 2.7, glow(0xffffff, 1.1, cityTexture()), 0.9, 2.15, -2.98)
-  const frame = mat(0x07080d, 0.6)
-  for (const x of [-1.72, 0.03, 1.78, 3.52]) box(s, 0.07, 2.8, 0.08, frame, x, 2.15, -2.94)
-  for (const y of [0.78, 2.15, 3.52]) box(s, 5.3, 0.07, 0.08, frame, 0.9, y, -2.94)
+function contactShadow(b: Base, where: CrowPlacement, crowAspect: number, strength = 0.6, cast: [number, number] = [0, 0.012]) {
+  const w = ((where.height * crowAspect) / b.space.plate.aspect) * 0.55
+  b.set('uShadow', new THREE.Vector4(where.feet[0], where.feet[1] + 0.004, w, w * b.space.plate.aspect * 0.12))
+  b.set('uShadowCast', new THREE.Vector3(cast[0], cast[1], 0.6))
+  b.set('uShadowStrength', strength)
+}
 
-  // desk
-  const wood = M.wood()
-  box(s, 2.5, 0.07, 1.05, wood, 0, 0.76, 0.4)
-  box(s, 2.4, 0.72, 0.05, wood, 0, 0.37, 0.88)
-  for (const x of [-1.18, 1.18]) box(s, 0.06, 0.74, 1, wood, x, 0.37, 0.4)
+const crowTick = (mesh: THREE.Mesh, t: number) => ((mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = t)
 
-  // chair and crow
-  const leather = M.leather()
-  box(s, 0.78, 1.25, 0.14, leather, 0, 0.95, -0.82)
-  box(s, 0.78, 0.12, 0.7, leather, 0, 0.5, -0.5)
-  crow(s, 'seated', { z: -0.36, h: 1.62, contact: false })
-
-  // lamp
-  const metal = M.metal()
-  cyl(s, 0.1, 0.11, 0.03, metal, -0.82, 0.81, 0.55)
-  cyl(s, 0.012, 0.012, 0.46, metal, -0.82, 1.04, 0.55)
-  cyl(s, 0.05, 0.15, 0.16, metal, -0.82, 1.3, 0.55)
-  const lamp = new THREE.PointLight(0xffc98a, 2.6, 4.5, 1.2)
-  lamp.position.set(-0.8, 1.18, 0.6)
-  s.add(lamp)
-  haze(s, [-0.82, 1.3, 0.55], [-0.82, 0.8, 0.55], 0.42, 0xffe2b8, 0.3)
-
-  // desk clutter: ledger, coins, nameplate
-  box(s, 0.5, 0.03, 0.36, mat(INK, 0.9), 0.25, 0.81, 0.5).rotation.y = 0.2
-  const gold = M.gold()
-  coinStack(s, gold, 0.85, 0.795, 0.6, 6, 0.06)
-  coinStack(s, gold, 0.98, 0.795, 0.52, 3, 0.06)
-  box(s, 0.5, 0.1, 0.05, M.metal(), -0.1, 0.84, 0.85)
-
-  return {
-    scene: s,
-    cam: { from: [1.7, 1.8, 5.4], to: [0.7, 1.42, 3.6], look: [0, 1.08, -0.2], fov: 38 },
-    focus: [0, 1.1, 0],
-    update: (t) => (lamp.intensity = 2.6 + Math.sin(t * 9) * 0.05),
-  }
+function stage(b: Base, focus: number): Stage {
+  return { scene: b.scene, space: b.space, focus, plate: b.plate }
 }
 
 // ---------------------------------------------------------------------------
-// 03 ON STAGE: keynote, big screen, a full house in silhouette
+// 01 THE CROW: spotlit floor, coins
 // ---------------------------------------------------------------------------
-function stage({ env, openVideo }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [2, 8.5, 4.5], aim: [3.2, 1.4, -0.2], keyPower: 8, keyAngle: 0.36, rim: [3.5, 5, -5], rimPower: 10, ambient: 0.22, fog: 0.03 })
-  ground(s, M.dark())
-  box(s, 10, 0.5, 4.6, mat(0x0d0f18, 0.35, 0.3), 0, 0.25, -1)
-  box(s, 22, 12, 0.3, M.wall(), 0, 6, -3.6)
-  crow(s, 'stage', { x: 3.3, y: 0.5, z: -0.1, h: 2.05 })
-
-  const slide = canvasTexture(1024, 576, (c, w, h) => {
-    c.fillStyle = '#081230'
-    c.fillRect(0, 0, w, h)
-    c.strokeStyle = '#2f7bff'
-    c.lineWidth = 6
-    c.strokeRect(14, 14, w - 28, h - 28)
-    c.fillStyle = '#edeef2'
-    c.font = `150px ${ANTON}`
-    c.fillText('COUPON', 60, 220)
-    c.fillText('CROWS', 60, 370)
-    c.fillStyle = '#2f7bff'
-    c.font = `500 30px ${MONO}`
-    c.fillText('////// KEYNOTE · ONE SLIDE', 64, 440)
-    c.fillStyle = '#edeef2'
-    c.beginPath()
-    c.arc(790, 290, 112, 0, Math.PI * 2)
-    c.fill()
-    c.fillStyle = '#081230'
-    c.beginPath()
-    c.moveTo(755, 225)
-    c.lineTo(860, 290)
-    c.lineTo(755, 355)
-    c.fill()
-    c.fillStyle = '#edeef2'
-    c.font = `500 26px ${MONO}`
-    c.fillText('CLICK TO PLAY', 688, 460)
+function hero(): Stage {
+  const b = base('bg-01', 2.6, 28, { haze: ['#0d1834', 0.18] }, 0.75)
+  const c = addCrow(b, 'hero', { feet: [0.5, 0.775], height: 0.46 }, {
+    tint: '#cfd8ea', rim: '#5d8dff', rimFrom: [-1, 0.15], rimAmount: 1.3, feet: 0.4,
   })
-  box(s, 6.1, 3.5, 0.12, M.dark(), 1, 2.95, -3.2)
-  const screen = panel(s, 5.8, 3.26, glow(0xffffff, 1.25, slide), 1, 2.95, -3.12)
-  const wash = new THREE.PointLight(BLUE, 2.2, 9, 1)
-  wash.position.set(1, 3, -2.2)
-  s.add(wash)
+  return { ...stage(b, 0.5), update: (t) => (b.tick(t), crowTick(c.mesh, t)) }
+}
 
-  haze(s, [5.5, 8.5, 2.5], [3.3, 0.5, -0.1], 1.4, 0xdfe8ff, 0.13)
-  haze(s, [-4.5, 8.5, 2.5], [-2, 0.5, -1], 1.7, 0x9cc2ff, 0.08)
-
-  // audience: heads and shoulders, a few rows deep
-  const dark = mat(0x04050a, 0.85)
-  const r = seeded(3)
-  const seats: [number, number, number][] = []
-  for (let row = 0; row < 5; row++) {
-    for (let x = -5.6 + (row % 2) * 0.36; x <= 5.6; x += 0.74) seats.push([x + (r() - 0.5) * 0.12, 0.98 + row * 0.07 + r() * 0.08, 2.5 + row * 0.95])
-  }
-  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 12, 9), dark, seats.length)
-  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.2, 0.4, 3, 8), dark, seats.length)
-  const m4 = new THREE.Matrix4()
-  seats.forEach(([x, y, z], i) => {
-    heads.setMatrixAt(i, m4.makeTranslation(x, y + 0.38, z))
-    bodies.setMatrixAt(i, m4.makeScale(1.35, 1, 0.8).setPosition(x, y - 0.12, z))
+// ---------------------------------------------------------------------------
+// 02 WHY THE NAME: the office
+// ---------------------------------------------------------------------------
+function office(): Stage {
+  const b = base('bg-02', 2.2, 30, {
+    haze: ['#0b1530', 0.12],
+    lights: [{ at: [0.235, 0.4], radius: [0.07, 0.07], color: '#ffb070', amount: 0.35, kind: 'pulse' }],
   })
-  s.add(heads, bodies)
+  const c = addCrow(
+    b, 'seated',
+    { feet: [0.69, 0.8], depthAt: [0.6, 0.55], height: 0.58 },
+    { tint: '#d6c6b2', rim: '#ffb46a', rimFrom: [-1, 0.35], rimAmount: 1.2, feet: 0.2 },
+    { feet: [0.5, 0.66], depthAt: [0.5, 0.52], height: 0.44 },
+    false,
+  )
+  return { ...stage(b, 0.6), update: (t) => (b.tick(t), crowTick(c.mesh, t)) }
+}
 
+// ---------------------------------------------------------------------------
+// 03 ON STAGE: the big screen plays the keynote
+// ---------------------------------------------------------------------------
+function onStage({ openVideo }: SceneDeps): Stage {
+  const b = base('bg-03', 2.4, 34, { haze: ['#0d1a3c', 0.22] }, 0.8)
+  const c = addCrow(b, 'stage', { feet: [0.7, 0.645], height: 0.4 }, {
+    tint: '#bcc8e6', rim: '#4d86ff', rimFrom: [1, 0.4], rimAmount: 1.4, feet: 0.3,
+  })
+  const slide = canvasTexture(1280, 720, (x, w, h) => {
+    const g = x.createLinearGradient(0, 0, w, h)
+    g.addColorStop(0, '#0a1430')
+    g.addColorStop(1, '#040814')
+    x.fillStyle = g
+    x.fillRect(0, 0, w, h)
+    x.strokeStyle = 'rgba(47,123,255,.6)'
+    x.lineWidth = 4
+    x.strokeRect(24, 24, w - 48, h - 48)
+    x.fillStyle = '#edeef2'
+    x.font = `170px ${ANTON}`
+    x.fillText('COUPON', 90, 300)
+    x.fillText('CROWS', 90, 470)
+    x.fillStyle = '#8cb4ff'
+    x.font = `500 34px ${MONO}`
+    x.fillText('////// KEYNOTE · ONE SLIDE', 96, 550)
+    x.fillStyle = '#edeef2'
+    x.beginPath()
+    x.arc(990, 360, 120, 0, Math.PI * 2)
+    x.fill()
+    x.fillStyle = '#0a1430'
+    x.beginPath()
+    x.moveTo(950, 290)
+    x.lineTo(1065, 360)
+    x.lineTo(950, 430)
+    x.fill()
+    x.fillStyle = '#edeef2'
+    x.font = `500 28px ${MONO}`
+    x.fillText('CLICK TO PLAY', 888, 540)
+  })
+  const screen = plateQuad(b.space, [[0.19, 0.17], [0.81, 0.17], [0.81, 0.59], [0.19, 0.59]], screenMaterial(slide, 0.92))
+  b.scene.add(screen)
+  const mat = screen.material as THREE.MeshBasicMaterial
   return {
-    scene: s,
-    cam: { from: [0, 1.95, 9.6], to: [0, 2.1, 7.1], look: [0, 2.15, -1], fov: 40 },
-    focus: [2.7, 2.1, 0],
+    ...stage(b, 0.6),
     clickables: [{ object: screen, onClick: openVideo }],
-    update: (t) => (wash.intensity = 2.2 + Math.sin(t * 2.3) * 0.25),
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 04 THE POST: the crow, his phone, and one very large post
-// ---------------------------------------------------------------------------
-function post({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [-2.5, 6, 4], aim: [-1, 1, 0], keyPower: 6, rim: [3, 4, -4], rimPower: 10, ambient: 0.28, fog: 0.045 })
-  ground(s)
-  box(s, 26, 10, 0.3, M.wall(), 0, 5, -6)
-  crow(s, 'phone', { x: 0.15, h: 2.08 })
-
-  const tex = canvasTexture(1000, 720, (c, w, h) => {
-    c.fillStyle = '#0a0e1c'
-    c.fillRect(0, 0, w, h)
-    c.strokeStyle = 'rgba(237,238,242,.35)'
-    c.lineWidth = 4
-    c.strokeRect(2, 2, w - 4, h - 4)
-    c.fillStyle = '#2f7bff'
-    c.fillRect(0, 0, 70, 8)
-    c.fillRect(0, 0, 8, 70)
-    // avatar: a small crow head
-    c.strokeStyle = '#2f7bff'
-    c.lineWidth = 5
-    c.beginPath()
-    c.arc(104, 112, 52, 0, Math.PI * 2)
-    c.stroke()
-    c.fillStyle = '#12357f'
-    c.beginPath()
-    c.arc(98, 116, 26, 0, Math.PI * 2)
-    c.fill()
-    c.fillStyle = '#2f7bff'
-    c.beginPath()
-    c.moveTo(116, 100)
-    c.lineTo(146, 114)
-    c.lineTo(118, 124)
-    c.fill()
-    c.fillStyle = '#edeef2'
-    c.font = `500 40px ${MONO}`
-    c.fillText('wire_sitter_09', 184, 104)
-    c.globalAlpha = 0.6
-    c.font = `26px ${MONO}`
-    c.fillText('THE PERCH · EAST WIRE BOARD', 184, 148)
-    c.globalAlpha = 1
-    c.font = '600 62px "Instrument Sans", sans-serif'
-    c.fillText('what do you call a bird', 56, 290)
-    c.fillStyle = '#2f7bff'
-    c.fillText('that comes back every', 56, 372)
-    c.fillText('season for the same coin?', 56, 454)
-    c.fillStyle = '#edeef2'
-    c.fillText('asking for the flock', 56, 536)
-    c.globalAlpha = 0.25
-    c.fillRect(56, 596, w - 112, 3)
-    c.globalAlpha = 0.7
-    c.font = `28px ${MONO}`
-    c.fillText('214 CAWS      61 ECHOES      9 SHINIES', 56, 660)
-  })
-  const card = new THREE.Group()
-  card.position.set(2.45, 1.75, -0.1)
-  card.rotation.y = -0.34
-  box(card, 2.66, 1.94, 0.05, M.dark(), 0, 0, -0.03)
-  panel(card, 2.6, 1.87, glow(0xffffff, 1.05, tex), 0, 0, 0)
-  s.add(card)
-  const spill = new THREE.PointLight(BLUE, 2.4, 6, 1)
-  spill.position.set(0.5, 1.6, 1)
-  s.add(spill)
-
-  // motes drifting up past the card
-  const r = seeded(5)
-  const motes = Array.from({ length: 16 }, () => {
-    const m = panel(s, 0.05, 0.05, glow(BLUE, 2.4), 0, 0, 0)
-    m.userData = { x: 1.1 + r() * 2.8, z: -0.6 + r() * 1.4, speed: 0.12 + r() * 0.25, phase: r() * 4 }
-    return m
-  })
-
-  return {
-    scene: s,
-    cam: { from: [0.2, 1.6, 6.6], to: [0.5, 1.55, 4.9], look: [0.5, 1.4, 0], fov: 38 },
-    focus: [0.4, 1.4, 0],
     update(t) {
-      card.position.y = 1.75 + Math.sin(t * 0.9) * 0.05
-      card.rotation.z = Math.sin(t * 0.6) * 0.012
-      for (const m of motes) {
-        const u = m.userData
-        m.position.set(u.x + Math.sin(t * 0.5 + u.phase) * 0.1, ((t * u.speed + u.phase) % 3.6) + 0.1, u.z)
-      }
+      b.tick(t)
+      crowTick(c.mesh, t)
+      mat.opacity = 0.86 + Math.sin(t * 2.1) * 0.04 + (Math.random() < 0.02 ? -0.12 : 0)
     },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 05 THE INTERVIEW: two armchairs, one guest
+// 04 THE POST: penthouse, night
 // ---------------------------------------------------------------------------
-function interview({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [2.2, 5.2, 3.8], aim: [-0.7, 0.9, 0], keyPower: 5.5, rim: [-3.2, 3.2, -2.6], rimPower: 9, ambient: 0.3 })
-  ground(s, mat(0x0c0d14, 0.7))
-  box(s, 18, 8, 0.3, M.wall(), 0, 4, -2.9)
-  cyl(s, 2.5, 2.5, 0.015, mat(0x0c1838, 0.95), 0, 0.008, 0.2, 40)
-
-  const leather = M.leather()
-  const armchair = (x: number, turn: number) => {
-    const g = new THREE.Group()
-    g.position.set(x, 0, 0)
-    g.rotation.y = turn
-    box(g, 0.86, 0.32, 0.82, leather, 0, 0.34, 0)
-    box(g, 0.86, 0.95, 0.18, leather, 0, 0.88, -0.38)
-    for (const ax of [-0.46, 0.46]) box(g, 0.15, 0.56, 0.84, leather, ax, 0.5, 0)
-    s.add(g)
-  }
-  armchair(-1.2, 0.42)
-  armchair(1.2, -0.42)
-  crow(s, 'seated', { x: -1.16, z: 0.14, h: 1.66, contact: false })
-
-  // table, mic, two waters
-  const wood = M.wood()
-  cyl(s, 0.4, 0.4, 0.04, wood, 0, 0.6, 0.4)
-  cyl(s, 0.04, 0.04, 0.58, wood, 0, 0.3, 0.4)
-  cyl(s, 0.24, 0.26, 0.03, wood, 0, 0.015, 0.4)
-  const metal = M.metal()
-  cyl(s, 0.06, 0.07, 0.02, metal, -0.04, 0.63, 0.36)
-  cyl(s, 0.012, 0.012, 0.2, metal, -0.04, 0.73, 0.36)
-  ball(s, 0.048, M.dark(), -0.04, 0.85, 0.36)
-  const glass = M.glass()
-  cyl(s, 0.036, 0.03, 0.12, glass, 0.2, 0.68, 0.5)
-  cyl(s, 0.036, 0.03, 0.12, glass, -0.24, 0.68, 0.55)
-
-  // the fire in "fireside"
-  box(s, 2, 1.5, 0.35, mat(0x161923, 0.9), 0, 0.75, -2.6)
-  const fire = panel(s, 1.2, 0.8, glow(0xffd9a8, 1.2), 0, 0.55, -2.42)
-  const ember = new THREE.PointLight(0xffb070, 2.2, 6, 1)
-  ember.position.set(0, 0.7, -1.9)
-  s.add(ember)
-
-  return {
-    scene: s,
-    cam: { from: [0.5, 1.55, 5.9], to: [-0.2, 1.32, 4.1], look: [0, 0.98, 0], fov: 38 },
-    focus: [-0.7, 1, 0],
-    update(t) {
-      const flicker = 0.8 + Math.sin(t * 11) * 0.1 + Math.sin(t * 17.3) * 0.08
-      ember.intensity = 2.2 * flicker
-      ;(fire.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.2 * flicker
-    },
-  }
+function post(): Stage {
+  const b = base('bg-04', 2.4, 34, { haze: ['#0b1736', 0.16] })
+  const c = addCrow(b, 'phone', { feet: [0.63, 0.86], height: 0.66 }, {
+    tint: '#bdc8e0', rim: '#ffb070', rimFrom: [1, 0.25], rimAmount: 1.0, feet: 0.35,
+  })
+  return { ...stage(b, 0.6), update: (t) => (b.tick(t), crowTick(c.mesh, t)) }
 }
 
 // ---------------------------------------------------------------------------
-// 06 BROADCAST: news desk, wall of monitors, ON AIR
+// 05 THE INTERVIEW: fireside, the fire flickers
 // ---------------------------------------------------------------------------
-function broadcast({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [1.6, 5.4, 4.4], aim: [0, 1.3, -0.3], keyPower: 6, rim: [-3.8, 3.4, -1], rimPower: 9, ambient: 0.3 })
-  ground(s, mat(0x080a12, 0.3, 0.3))
-  box(s, 7.2, 3.3, 0.2, M.dark(), 0, 2.45, -2.3)
+function interview(): Stage {
+  const b = base('bg-05', 2.2, 28, {
+    haze: ['#1a1410', 0.1],
+    lights: [{ at: [0.47, 0.46], radius: [0.15, 0.14], color: '#ffb060', amount: 0.55, kind: 'fire' }],
+  })
+  const c = addCrow(
+    b, 'seated',
+    { feet: [0.395, 0.865], height: 0.68 },
+    { tint: '#dcc0a2', rim: '#ff9a50', rimFrom: [1, 0.1], rimAmount: 1.3, feet: 0.35 },
+    { feet: [0.2, 0.8], depthAt: [0.2, 0.62], height: 0.44 },
+  )
+  ;(c.mesh.material as THREE.ShaderMaterial).uniforms.uFlicker.value = 1
+  return { ...stage(b, 0.4), update: (t) => (b.tick(t), crowTick(c.mesh, t)) }
+}
+
+// ---------------------------------------------------------------------------
+// 06 BROADCAST: monitors, ticker, ON AIR
+// ---------------------------------------------------------------------------
+function broadcast(): Stage {
+  const b = base('bg-06', 2.3, 30, { haze: ['#0b1736', 0.14] })
+  const c = addCrow(
+    b, 'seated',
+    { feet: [0.615, 0.66], depthAt: [0.55, 0.5], height: 0.4 },
+    { tint: '#b6c4e4', rim: '#4d86ff', rimFrom: [1, 0.3], rimAmount: 1.4, feet: 0.2 },
+    { feet: [0.5, 0.62], depthAt: [0.5, 0.5], height: 0.33 },
+    false,
+  )
 
   const r = seeded(21)
-  const screens = [
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      c.strokeStyle = '#2f7bff'
-      c.lineWidth = 5
-      c.beginPath()
-      for (let x = 0, y = h * 0.8; x <= w; x += 16) c.lineTo(x, (y -= 2 + (r() - 0.35) * 18))
-      c.stroke()
+  const draw: ((x: CanvasRenderingContext2D, w: number, h: number) => void)[] = [
+    (x, w, h) => {
+      x.strokeStyle = '#2f7bff'
+      x.lineWidth = 6
+      x.beginPath()
+      for (let px = 0, y = h * 0.8; px <= w; px += 18) x.lineTo(px, (y -= 2 + (r() - 0.35) * 20))
+      x.stroke()
     },
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      c.fillStyle = '#edeef2'
-      c.font = `120px ${ANTON}`
-      c.textAlign = 'center'
-      c.fillText('LIVE', w / 2, h / 2 + 44)
+    (x, w, h) => {
+      x.fillStyle = '#edeef2'
+      x.font = `130px ${ANTON}`
+      x.textAlign = 'center'
+      x.fillText('WIRE NEWS', w / 2, h / 2 + 40)
     },
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      for (let i = 0; i < 12; i++) {
-        c.fillStyle = i % 3 ? '#2f7bff' : '#edeef2'
-        const bh = 20 + r() * (h - 60)
-        c.fillRect(22 + i * 31, h - 20 - bh, 20, bh)
+    (x, _w, h) => {
+      for (let i = 0; i < 14; i++) {
+        x.fillStyle = i % 3 ? '#2f7bff' : '#8cb4ff'
+        const bh = 30 + r() * (h - 80)
+        x.fillRect(30 + i * 40, h - 30 - bh, 26, bh)
       }
     },
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      c.fillStyle = '#edeef2'
-      c.font = `70px ${ANTON}`
-      c.textAlign = 'center'
-      c.fillText('WIRE NEWS', w / 2, h / 2 + 6)
-      c.fillStyle = '#2f7bff'
-      c.font = `500 20px ${MONO}`
-      c.fillText('////// ALL COINS, ALL THE TIME', w / 2, h / 2 + 48)
+    (x, w, h) => {
+      x.fillStyle = '#edeef2'
+      x.font = `150px ${ANTON}`
+      x.textAlign = 'center'
+      x.fillText('LIVE', w / 2, h / 2 + 52)
     },
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      for (let i = 0; i < 260; i++) {
-        c.fillStyle = r() < 0.2 ? '#edeef2' : '#12357f'
-        c.fillRect(r() * w, r() * h, 6, 6)
+    (x, w, h) => {
+      for (let i = 0; i < 420; i++) {
+        x.fillStyle = r() < 0.2 ? '#edeef2' : '#1a46c8'
+        x.fillRect(r() * w, r() * h, 7, 7)
       }
     },
-    (c: CanvasRenderingContext2D, w: number, h: number) => {
-      c.strokeStyle = '#edeef2'
-      c.lineWidth = 6
-      c.beginPath()
-      c.arc(w / 2, h / 2, 62, 0, Math.PI * 2)
-      c.stroke()
-      c.fillStyle = '#2f7bff'
-      c.font = `90px ${ANTON}`
-      c.textAlign = 'center'
-      c.fillText('C', w / 2, h / 2 + 34)
+    (x, w, h) => {
+      x.strokeStyle = '#edeef2'
+      x.lineWidth = 8
+      x.beginPath()
+      x.arc(w / 2, h / 2, 80, 0, Math.PI * 2)
+      x.stroke()
+      x.fillStyle = '#2f7bff'
+      x.font = `120px ${ANTON}`
+      x.textAlign = 'center'
+      x.fillText('C', w / 2, h / 2 + 44)
     },
   ]
-  screens.forEach((draw, i) => {
-    const tex = canvasTexture(400, 224, (c, w, h) => {
-      c.fillStyle = '#060b1d'
-      c.fillRect(0, 0, w, h)
-      draw(c, w, h)
+  const cols = [0.195, 0.372, 0.628, 0.805]
+  const rows = [0.195, 0.312, 0.432]
+  const monitors: THREE.MeshBasicMaterial[] = []
+  draw.forEach((fn, i) => {
+    const cx = i % 3
+    const ry = Math.floor(i / 3)
+    const tex = canvasTexture(600, 300, (x, w, h) => {
+      x.fillStyle = '#050a1c'
+      x.fillRect(0, 0, w, h)
+      fn(x, w, h)
     })
-    panel(s, 1.9, 1.06, glow(0xffffff, 0.95, tex), -2.1 + (i % 3) * 2.1, i < 3 ? 3.1 : 1.94, -2.18)
+    const g = 0.004
+    const m = screenMaterial(tex, 0.82)
+    monitors.push(m)
+    b.scene.add(
+      plateQuad(b.space, [[cols[cx] + g, rows[ry] + g], [cols[cx + 1] - g, rows[ry] + g], [cols[cx + 1] - g, rows[ry + 1] - g], [cols[cx] + g, rows[ry + 1] - g]], m),
+    )
   })
-  const wash = new THREE.PointLight(BLUE, 2.6, 8, 1)
-  wash.position.set(0, 2.4, -1.4)
-  s.add(wash)
 
-  // desk with a scrolling ticker
-  box(s, 4.6, 0.95, 1, mat(0x0a0d18, 0.3, 0.45), 0, 0.475, 0.3)
-  box(s, 4.8, 0.06, 1.16, M.metal(), 0, 0.98, 0.3)
-  panel(s, 4.6, 0.05, glow(BLUE, 1.8), 0, 0.3, 0.81)
-  const ticker = canvasTexture(2048, 96, (c, w, h) => {
-    c.fillStyle = '#edeef2'
-    c.fillRect(0, 0, w, h)
-    c.fillStyle = '#020308'
-    c.font = `64px ${ANTON}`
-    c.fillText('BREAKING: LOCAL CROW FINDS COIN  ///  GULLS DEMAND RECOUNT  ///  FOIL FUTURES STEADY  ///', 20, 72)
+  const sign = canvasTexture(1024, 160, (x, w) => {
+    x.fillStyle = '#0a0f1e'
+    x.fillRect(0, 0, w, 160)
+    x.fillStyle = '#f5f6fa'
+    x.font = `120px ${ANTON}`
+    x.textAlign = 'center'
+    x.fillText('ON AIR', w / 2, 128)
+  })
+  const onAir = screenMaterial(sign, 1)
+  b.scene.add(plateQuad(b.space, [[0.3, 0.1], [0.7, 0.1], [0.7, 0.162], [0.3, 0.162]], onAir))
+
+  const ticker = canvasTexture(2048, 96, (x) => {
+    x.fillStyle = '#edeef2'
+    x.fillRect(0, 0, 2048, 96)
+    x.fillStyle = '#020308'
+    x.font = `64px ${ANTON}`
+    x.fillText('BREAKING: LOCAL CROW FINDS COIN  ///  GULLS DEMAND RECOUNT  ///  FOIL FUTURES STEADY  ///', 20, 72)
   })
   ticker.wrapS = THREE.RepeatWrapping
-  ticker.repeat.x = 1
-  panel(s, 4.4, 0.24, glow(0xffffff, 0.9, ticker), 0, 0.62, 0.812)
-  crow(s, 'seated', { z: -0.38, h: 1.8, contact: false })
-  cyl(s, 0.012, 0.012, 0.22, M.metal(), 0.5, 1.12, 0.45)
-  ball(s, 0.045, M.dark(), 0.5, 1.24, 0.45)
-  box(s, 0.4, 0.015, 0.28, mat(INK, 0.9), -0.6, 1.02, 0.5).rotation.y = -0.15
-
-  // ON AIR
-  const sign = canvasTexture(256, 96, (c, w, h) => {
-    c.fillStyle = '#edeef2'
-    c.fillRect(0, 0, w, h)
-    c.fillStyle = '#020308'
-    c.font = `70px ${ANTON}`
-    c.textAlign = 'center'
-    c.fillText('ON AIR', w / 2, 74)
-  })
-  box(s, 1.1, 0.42, 0.14, M.dark(), -2.9, 4.42, -2.2)
-  const onAir = panel(s, 1, 0.36, glow(0xffffff, 1.6, sign), -2.9, 4.42, -2.12)
-
-  haze(s, [-3, 7, 3], [-0.4, 1, 0], 1.3, 0xdfe8ff, 0.07)
+  b.scene.add(plateQuad(b.space, [[0.3, 0.655], [0.7, 0.655], [0.7, 0.692], [0.3, 0.692]], screenMaterial(ticker, 0.95)))
 
   return {
-    scene: s,
-    cam: { from: [-1.5, 1.75, 6.3], to: [-1.3, 1.6, 4.7], look: [-1.3, 1.75, -0.6], fov: 40 },
-    focus: [0, 1.7, 0],
+    ...stage(b, 0.55),
     update(t, dt) {
-      ticker.offset.x += dt * 0.07
-      ;(onAir.material as THREE.MeshStandardMaterial).emissiveIntensity = t % 1.6 < 1.1 ? 1.7 : 0.25
+      b.tick(t)
+      crowTick(c.mesh, t)
+      ticker.offset.x += dt * 0.06
+      onAir.color.setScalar(t % 1.8 < 1.25 ? 1 : 0.35)
+      monitors.forEach((m, i) => (m.opacity = 0.78 + Math.sin(t * (1.3 + i * 0.4)) * 0.05))
     },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 07 THE CHART: a line that only goes up, and a crow out for a walk on it
+// 07 THE CHART: he walks the floor, the room scrolls past, the chart is on the wall
 // ---------------------------------------------------------------------------
-function chart({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [-2, 10, 7], aim: [1, 2.6, 0], keyPower: 4.5, keyAngle: 0.6, rim: [5, 7, -5], rimPower: 9, ambient: 0.3, fog: 0.028 })
-  ground(s, mat(0x05070e, 0.5, 0.2))
-  const grid = new THREE.GridHelper(40, 40, 0x12357f, 0x0b1a44)
-  grid.position.y = 0.01
-  s.add(grid)
-
-  const lines = canvasTexture(64, 512, (c, w, h) => {
-    c.fillStyle = '#04060f'
-    c.fillRect(0, 0, w, h)
-    c.fillStyle = '#12357f'
-    for (let y = 0; y < h; y += 32) c.fillRect(0, y, w, 2)
-  })
-  lines.wrapS = THREE.RepeatWrapping
-  lines.repeat.x = 30
-  panel(s, 40, 14, glow(0xffffff, 0.5, lines), 0, 7, -5)
-
-  const r = seeded(42)
-  const N = 15
-  const pts: THREE.Vector3[] = []
-  const up = glow(BLUE, 1.5)
-  const down = glow(0x12357f, 1.2)
-  for (let i = 0; i < N; i++) {
-    const x = -6.6 + i * 0.94
-    const y = 0.7 + i * 0.36 + (r() - 0.5) * 0.7
-    pts.push(new THREE.Vector3(x, y + 0.55, 0))
-    const rising = i === 0 || r() > 0.28
-    const bodyH = 0.35 + r() * 0.7
-    box(s, 0.3, bodyH, 0.3, rising ? up : down, x, y - bodyH / 2 + 0.25, -0.9, false)
-    box(s, 0.04, bodyH + 0.6, 0.04, rising ? up : down, x, y - bodyH / 2 + 0.25, -0.9, false)
-  }
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.25)
-  const line = new THREE.Mesh(new THREE.TubeGeometry(curve, 160, 0.05, 8), glow(0x9cc2ff, 2.6))
-  s.add(line)
-  ball(s, 0.16, glow(INK, 2.4), pts[N - 1].x, pts[N - 1].y, 0)
-  const tipLight = new THREE.PointLight(BLUE, 3, 7, 1)
-  tipLight.position.copy(pts[N - 1])
-  s.add(tipLight)
-
-  // The walker: keyed video if public/assets/crow/walk.mp4 exists, otherwise the hero cutout slides along.
-  let walker: THREE.Object3D
-  if (walkVideo) {
-    const video = new THREE.VideoTexture(walkVideo)
-    video.colorSpace = THREE.SRGBColorSpace
-    const h = 1.7
-    const geo = new THREE.PlaneGeometry((h * walkVideo.videoWidth) / walkVideo.videoHeight, h)
-    geo.translate(0, h / 2, 0)
-    walker = new THREE.Mesh(
-      geo,
-      new THREE.ShaderMaterial({
-        uniforms: { map: { value: video } },
-        transparent: true,
-        side: THREE.DoubleSide,
-        vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        // Chroma key: how much greener than red or blue a pixel is decides how see-through it is.
-        fragmentShader: `uniform sampler2D map; varying vec2 vUv;
-          void main(){ vec4 c = texture2D(map, vUv); float spill = c.g - max(c.r, c.b);
-            float a = 1.0 - smoothstep(0.04, 0.18, spill); if (a < 0.05) discard;
-            c.g = min(c.g, max(c.r, c.b) + 0.02); gl_FragColor = vec4(c.rgb * 0.9, a); }`,
-      }),
-    )
-    s.add(walker)
-  } else {
-    walker = crow(s, 'hero', { h: 1.7, contact: false })
-  }
-
-  const at = new THREE.Vector3()
-  const tangent = new THREE.Vector3()
-  return {
-    scene: s,
-    cam: { from: [-1.6, 2.8, 11.5], to: [1.6, 3.9, 8.6], look: [0.9, 3.3, 0], fov: 42 },
-    focus: [0.8, 3.3, 0],
-    enter: () => void walkVideo?.play().catch(() => {}),
-    leave: () => walkVideo?.pause(),
-    update(t, _dt, p) {
-      const u = THREE.MathUtils.clamp(0.12 + p * 0.56 + Math.sin(t * 0.35) * 0.012, 0, 1)
-      curve.getPointAt(u, at)
-      curve.getTangentAt(u, tangent)
-      walker.position.set(at.x, at.y + 0.04 + (walkVideo ? 0 : Math.abs(Math.sin(t * 5)) * 0.045), 0.12)
-      walker.rotation.z = walkVideo ? 0 : Math.atan2(tangent.y, tangent.x) * 0.25
-      ;(line.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.4 + Math.sin(t * 3) * 0.3
-    },
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 08 CHEERS: a bar table, a round for the flock
-// ---------------------------------------------------------------------------
-function cheers({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [0.3, 4.6, 1.6], aim: [-0.1, 1, 0.1], keyPower: 7, keyAngle: 0.55, rim: [-3.2, 3.2, -2], rimPower: 9, ambient: 0.28 })
-  ground(s, mat(0x0c0b10, 0.45, 0.1))
-  box(s, 18, 8, 0.3, M.wall(), 0, 4, -3.2)
-
-  // back bar: counter, lit shelves, a row of bottles
-  const wood = M.wood()
-  box(s, 7.5, 1.1, 0.6, wood, 0, 0.55, -2.5)
-  panel(s, 6.6, 1.9, glow(BLUE, 0.55), 0, 2.25, -3.02)
-  const r = seeded(9)
-  for (const y of [1.55, 2.15, 2.75]) {
-    box(s, 6.8, 0.05, 0.32, wood, 0, y, -2.86)
-    for (let x = -3.1; x < 3.2; x += 0.22 + r() * 0.12) {
-      const h = 0.22 + r() * 0.22
-      const tint = r() < 0.3 ? 0x12357f : r() < 0.5 ? 0x8c93a6 : 0x05060b
-      cyl(s, 0.04, 0.045, h, mat(tint, 0.15, 0.2), x, y + 0.025 + h / 2, -2.86, 10)
-      cyl(s, 0.014, 0.02, 0.1, mat(tint, 0.15, 0.2), x, y + 0.075 + h, -2.86, 8)
+function chart(): Stage {
+  const b = base('bg-07', 2.4, 30, { scroll: true, haze: ['#0b1736', 0.05] }, 0.7)
+  // The chart: three plate-widths of a rising line with candles, glowing blue.
+  // Drawn bold: the whole band ends up only ~70 pixels tall before the pixel filter.
+  const chartTex = canvasTexture(4096, 512, (x, w, h) => {
+    const r = seeded(42)
+    const n = 26
+    const pts: [number, number][] = []
+    // Climbs steadily across the whole walk, never quite reaching the top.
+    let y = h * 0.84
+    for (let i = 0; i < n; i++) {
+      y -= h * (0.022 + (r() - 0.45) * 0.08)
+      y = Math.max(h * 0.1, Math.min(h * 0.88, y))
+      pts.push([((i + 0.5) / n) * w, y])
     }
-  }
-  const neon = canvasTexture(512, 128, (c, w) => {
-    c.fillStyle = '#edeef2'
-    c.font = `100px ${ANTON}`
-    c.textAlign = 'center'
-    c.fillText('THE WIRE', w / 2, 104)
+    // grid
+    x.fillStyle = 'rgba(47,123,255,.16)'
+    for (let gy = 40; gy < h; gy += 96) x.fillRect(0, gy, w, 4)
+    pts.forEach(([px, py], i) => {
+      const up = i === 0 || py <= pts[i - 1][1]
+      const body = 50 + r() * 90
+      x.fillStyle = up ? 'rgba(47,123,255,.95)' : 'rgba(26,70,200,.75)'
+      x.fillRect(px - 34, py + 26, 68, body)
+      x.fillRect(px - 6, py + 6, 12, body + 50)
+    })
+    x.shadowColor = 'rgba(140,180,255,1)'
+    x.shadowBlur = 40
+    x.strokeStyle = 'rgba(220,232,255,1)'
+    x.lineWidth = 22
+    x.lineJoin = 'round'
+    x.beginPath()
+    pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py)))
+    x.stroke()
   })
-  panel(s, 2.2, 0.55, new THREE.MeshStandardMaterial({ color: 0, emissive: 0xffffff, emissiveMap: neon, emissiveIntensity: 1.5, transparent: true, alphaMap: neon }), -2.3, 3.5, -3)
+  chartTex.wrapS = THREE.RepeatWrapping
+  b.set('uOverlay', chartTex)
+  b.set('uOverlayRect', new THREE.Vector4(0.12, 0.58, 1 / 3, 1))
 
-  // the table
-  cyl(s, 0.58, 0.58, 0.05, wood, 0.25, 1.08, 0.55, 32)
-  cyl(s, 0.05, 0.05, 1.05, M.metal(), 0.25, 0.53, 0.55)
-  cyl(s, 0.32, 0.34, 0.03, M.metal(), 0.25, 0.015, 0.55)
-  const glass = M.glass()
-  cyl(s, 0.045, 0.035, 0.14, glass, 0.1, 1.18, 0.7)
-  cyl(s, 0.045, 0.035, 0.14, glass, 0.45, 1.18, 0.62)
-  cyl(s, 0.045, 0.035, 0.14, glass, 0.32, 1.18, 0.35)
-  const bottle = mat(0x0c1a3a, 0.12, 0.2)
-  cyl(s, 0.042, 0.046, 0.26, bottle, 0.55, 1.24, 0.4, 12)
-  cyl(s, 0.015, 0.02, 0.1, bottle, 0.55, 1.42, 0.4, 8)
-  coinStack(s, M.gold(), 0.0, 1.105, 0.42, 4, 0.05)
-  for (const x of [-1.4, 1.7]) {
-    cyl(s, 0.2, 0.2, 0.06, M.leather(), x, 0.78, 0.2)
-    cyl(s, 0.03, 0.03, 0.76, M.metal(), x, 0.38, 0.2)
-  }
-  crow(s, 'toast', { x: -0.4, z: -0.25, h: 2.08 })
+  const where: CrowPlacement = { feet: [0.52, 0.93], height: 0.54 }
+  const light: CrowLight = { tint: '#c4cde4', exposure: 0.95, rim: '#5d8dff', rimFrom: [0.2, 1], rimAmount: 0.9, feet: 0.3 }
+  const walker = walk ? placeWalker(b.space, walk, where, light).mesh : placeCrow(b.space, 'hero', where, light).mesh
+  b.scene.add(walker)
+  contactShadow(b, where, walk ? walk.aspect * 0.55 : crows.hero.aspect, 0.55, [0, 0.01])
 
-  // pendant lamp
-  cyl(s, 0.06, 0.3, 0.24, M.dark(), 0.25, 2.9, 0.55)
-  cyl(s, 0.006, 0.006, 3, M.dark(), 0.25, 4.5, 0.55)
-  const cone = haze(s, [0.25, 2.85, 0.55], [0.25, 1.05, 0.55], 0.85, 0xffe2b8, 0.26)
-  const bulb = new THREE.PointLight(0xffd09a, 2.4, 5, 1)
-  bulb.position.set(0.25, 2.6, 0.55)
-  s.add(bulb)
+  // Scroll → how far the room has slid by. Walk speed follows scroll speed.
+  const TRAVEL = 1.6 // plate widths over the whole screen
+  const STRIDE = 0.5 // plate widths per second that look right at normal walking pace
+  let lastP = 0
+  let speed = 0
+  let facing = 1
+  const width = Math.abs(walker.scale.x)
+  const video = walk?.video
+  const standAt = walk ? walk.stand / walk.fps : 0
+  const frame = walk ? 1 / walk.fps : 0
 
   return {
-    scene: s,
-    cam: { from: [2.1, 1.6, 5.8], to: [1.6, 1.55, 4.3], look: [1.05, 1.4, 0], fov: 38 },
-    focus: [-0.1, 1.35, 0],
-    update: (t) => ((cone.material as THREE.ShaderMaterial).uniforms.uStrength.value = 0.25 + Math.sin(t * 1.3) * 0.02),
+    ...stage(b, 0.5),
+    enter() {
+      lastP = -1
+      if (!video) return
+      video.pause()
+      video.currentTime = standAt
+    },
+    leave: () => video?.pause(),
+    update(t, dt, p) {
+      b.tick(t)
+      crowTick(walker, t)
+      if (lastP < 0) lastP = p
+      const dp = p - lastP
+      lastP = p
+      b.set('uScroll', p * TRAVEL)
+      // Scrolling back: he turns round and walks the other way.
+      if (Math.abs(dp) > 1e-5) facing = Math.sign(dp)
+      walker.scale.x = width * facing
+      const v = Math.abs(dp * TRAVEL) / Math.max(dt, 1e-3)
+      speed += (v - speed) * Math.min(1, dt / 0.15)
+      if (!video) return
+      if (speed > 0.03) {
+        video.playbackRate = Math.min(2.5, Math.max(0.5, speed / STRIDE))
+        if (video.paused) void video.play().catch(() => {})
+      } else if (!video.paused) {
+        // Finish the stride (a little brisker), then hold the standing frame.
+        video.playbackRate = 1.6
+        const d = (video.currentTime - standAt + video.duration) % video.duration
+        if (d < frame * 1.5) {
+          video.pause()
+          video.currentTime = standAt
+        }
+      } else if (Math.abs(video.currentTime - standAt) > frame) {
+        // Stopped anywhere else (the browser paused it): rest on the standing frame.
+        video.currentTime = standAt
+      }
+    },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 09 ASK THE CROW: a laptop, and the questions coming off it
+// 08 CHEERS: the bar
 // ---------------------------------------------------------------------------
-function ask({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [-2.2, 4.8, 3.6], aim: [0, 1, 0], keyPower: 4.5, rim: [3.2, 3.6, -3], rimPower: 9, ambient: 0.3 })
-  ground(s, mat(0x0c0d14, 0.6))
-  box(s, 16, 7, 0.2, M.wall(), 0, 3.5, -2.8)
-  // shelves behind
-  const wood = M.wood()
-  const r = seeded(31)
-  for (const y of [1.3, 2.0, 2.7]) {
-    box(s, 3.4, 0.05, 0.3, wood, 2.4, y, -2.6)
-    for (let x = 0.9; x < 3.9; x += 0.1 + r() * 0.1) box(s, 0.07, 0.3 + r() * 0.2, 0.22, mat(r() < 0.25 ? 0x12357f : 0x1b1f2c, 0.8), x, y + 0.2, -2.6)
-  }
+function cheers(): Stage {
+  const b = base('bg-08', 2.0, 28, {
+    haze: ['#1a1410', 0.1],
+    lights: [{ at: [0.84, 0.07], radius: [0.1, 0.08], color: '#ffc080', amount: 0.25, kind: 'pulse' }],
+  })
+  const c = addCrow(b, 'toast', { feet: [0.6, 0.88], height: 0.7 }, {
+    tint: '#d8bea2', rim: '#ffb26a', rimFrom: [1, 0.5], rimAmount: 1.2, feet: 0.35,
+  })
+  return { ...stage(b, 0.6), update: (t) => (b.tick(t), crowTick(c.mesh, t)) }
+}
 
-  box(s, 2.2, 0.06, 0.95, wood, 0, 0.76, 0.3)
-  for (const [x, z] of [[-1.02, -0.1], [1.02, -0.1], [-1.02, 0.7], [1.02, 0.7]]) box(s, 0.06, 0.74, 0.06, wood, x, 0.37, z)
-  crow(s, 'laptop', { z: -0.38, h: 1.7, contact: false })
-
-  // laptop, seen from behind: the lid faces us, the screen lights the crow
-  const metal = M.metal()
-  box(s, 0.52, 0.02, 0.36, metal, 0.12, 0.8, 0.38)
-  const lid = box(s, 0.52, 0.34, 0.016, metal, 0.12, 0.96, 0.53)
-  lid.rotation.x = 0.28
-  const logo = cyl(s, 0.05, 0.05, 0.004, glow(INK, 1.6), 0.12, 0.97, 0.545, 20)
-  logo.rotation.x = Math.PI / 2 + 0.28
-  const screenLight = new THREE.PointLight(0x9cc2ff, 2.2, 3.5, 1)
-  screenLight.position.set(0.12, 1.02, 0.3)
-  s.add(screenLight)
-  cyl(s, 0.045, 0.04, 0.1, mat(INK, 0.6), -0.55, 0.84, 0.5)
-
+// ---------------------------------------------------------------------------
+// 09 ASK THE CROW: laptop glow, questions float up
+// ---------------------------------------------------------------------------
+function ask(): Stage {
+  const b = base('bg-09', 2.2, 30, {
+    haze: ['#0b1736', 0.12],
+    lights: [{ at: [0.57, 0.46], radius: [0.07, 0.07], color: '#8cb4ff', amount: 0.5, kind: 'screen' }],
+  })
+  const c = addCrow(
+    b, 'laptop',
+    { feet: [0.385, 0.76], depthAt: [0.47, 0.56], height: 0.5 },
+    { tint: '#b0bee0', rim: '#7aa6ff', rimFrom: [1, 0.2], rimAmount: 1.4, feet: 0.2 },
+    { feet: [0.5, 0.7], depthAt: [0.5, 0.56], height: 0.38 },
+    false,
+  )
   const QUESTIONS = ['WEN COIN?', 'IS IT SHINY?', 'WHY THE SUIT?', 'GULL OR NO GULL?', 'HOW MANY COINS?', 'WHO DREW YOU?', 'IS THIS ADVICE?', 'CAW?', 'WHERE IS THE NEST?']
+  const origin = b.space.at(0.57, 0.42)
+  const unit = b.space.span(0.1, -origin.z)
   const bubbles = QUESTIONS.map((q, i) => {
-    const tex = canvasTexture(512, 256, (c, w, h) => {
-      const blue = i % 3 === 1
-      c.fillStyle = blue ? '#2f7bff' : '#edeef2'
-      c.beginPath()
-      c.roundRect(8, 8, w - 16, h - 70, 46)
-      c.fill()
-      c.beginPath()
-      c.moveTo(110, h - 66)
-      c.lineTo(96, h - 8)
-      c.lineTo(180, h - 66)
-      c.fill()
-      c.fillStyle = '#020308'
-      c.font = `76px ${ANTON}`
-      c.textAlign = 'center'
-      c.fillText(q, w / 2, 124, w - 70)
+    const tex = canvasTexture(512, 256, (x, w, h) => {
+      x.fillStyle = i % 3 === 1 ? '#2f7bff' : '#edeef2'
+      x.beginPath()
+      x.roundRect(8, 8, w - 16, h - 70, 46)
+      x.fill()
+      x.beginPath()
+      x.moveTo(110, h - 66)
+      x.lineTo(96, h - 8)
+      x.lineTo(180, h - 66)
+      x.fill()
+      x.fillStyle = '#020308'
+      x.font = `76px ${ANTON}`
+      x.textAlign = 'center'
+      x.fillText(q, w / 2, 124, w - 70)
     })
-    const m = panel(s, 0.95, 0.475, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }), 0, 0, 0)
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(unit * 1.6, unit * 0.8), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }))
+    m.renderOrder = 4
     m.userData = { phase: i / QUESTIONS.length, side: ((i * 37) % 100) / 50 - 1 }
+    b.scene.add(m)
     return m
   })
-
   return {
-    scene: s,
-    cam: { from: [-1.9, 1.7, 5.4], to: [-1.3, 1.55, 3.9], look: [-0.95, 1.5, 0], fov: 40 },
-    focus: [0, 1.45, 0],
+    ...stage(b, 0.5),
     update(t, _dt, p) {
-      screenLight.intensity = 2.2 + Math.sin(t * 7) * 0.12
-      // More questions arrive the further you scroll.
+      b.tick(t)
+      crowTick(c.mesh, t)
       const live = 3 + Math.round(p * (bubbles.length - 3))
-      bubbles.forEach((b, i) => {
-        const life = (t * 0.11 + b.userData.phase) % 1
-        const mat = b.material as THREE.MeshBasicMaterial
-        mat.opacity = i < live ? Math.sin(life * Math.PI) ** 0.7 : 0
-        b.position.set(0.12 + b.userData.side * (0.3 + life * 1.5), 1.25 + life * 2.4, 0.6 + life * 0.5)
-        b.scale.setScalar(0.45 + life * 0.75)
+      bubbles.forEach((m, i) => {
+        const life = (t * 0.1 + m.userData.phase) % 1
+        ;(m.material as THREE.MeshBasicMaterial).opacity = i < live ? Math.sin(life * Math.PI) ** 0.7 : 0
+        m.position.set(origin.x + m.userData.side * unit * (0.6 + life * 3), origin.y + unit * (0.3 + life * 4.2), origin.z + unit * life * 2)
+        m.scale.setScalar(0.5 + life * 0.7)
       })
     },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 10 THE TOKEN: the vault. Scroll opens the door.
+// 10 THE TOKEN: the vault door swings further open as you scroll
 // ---------------------------------------------------------------------------
-function token({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [3.2, 6.5, 5.5], aim: [1.4, 1.4, -0.2], keyPower: 5.5, rim: [-4.5, 4, 2.5], rimPower: 8, ambient: 0.26 })
-  ground(s, mat(0x0a0c14, 0.35, 0.3))
+function token(): Stage {
+  const DOOR: [number, number, number, number] = [0.755, 0.0, 1.0, 0.745]
+  const b = base('bg-10', 2.2, 30, { haze: ['#14100a', 0.1], hole: { rect: DOOR, color: '#0a0d16' } })
+  const c = addCrow(b, 'coin', { feet: [0.57, 0.86], height: 0.66 }, {
+    tint: '#dcc6a2', rim: '#ffc46a', rimFrom: [1, 0.15], rimAmount: 1.3, feet: 0.35,
+  })
 
-  const CY = 1.95
-  const R = 1.55
-  const wallShape = new THREE.Shape()
-  wallShape.moveTo(-9, 0)
-  wallShape.lineTo(9, 0)
-  wallShape.lineTo(9, 8)
-  wallShape.lineTo(-9, 8)
-  wallShape.closePath()
-  wallShape.holes.push(new THREE.Path().absarc(0, CY, R, 0, Math.PI * 2, true))
-  const steel = mat(0x242938, 0.5, 0.65)
-  const wall = new THREE.Mesh(new THREE.ExtrudeGeometry(wallShape, { depth: 0.6, bevelEnabled: false, curveSegments: 40 }), steel)
-  wall.position.z = -1.1
-  wall.castShadow = wall.receiveShadow = true
-  s.add(wall)
-  const frame = new THREE.Mesh(new THREE.TorusGeometry(R + 0.06, 0.13, 12, 48), M.metal())
-  frame.position.set(0, CY, -0.48)
-  s.add(frame)
-
-  // door, hinged on the left
+  // The door: the photo's own door, cut out onto a panel hinged at its left edge.
+  const [u0, v0, u1, v1] = DOOR
+  const z = b.space.z(0.8, 0.4) * 0.97
+  const tl = b.space.at(u0, v0, z)
+  const br = b.space.at(u1, v1, z)
+  const tex = b.space.plate.texture.clone()
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.repeat.set(u1 - u0, v1 - v0)
+  tex.offset.set(u0, 1 - v1)
+  tex.needsUpdate = true
+  const width = br.x - tl.x
+  const height = tl.y - br.y
+  const geo = new THREE.PlaneGeometry(width, height)
+  geo.translate(width / 2, -height / 2, 0)
+  const door = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }))
   const hinge = new THREE.Group()
-  hinge.position.set(-R - 0.1, CY, -0.42)
-  s.add(hinge)
-  const doorMat = mat(0x596072, 0.34, 0.9)
-  const disc = cyl(hinge, R - 0.02, R - 0.02, 0.3, doorMat, R + 0.1, 0, 0.1, 48)
-  disc.rotation.x = Math.PI / 2
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.05, 10, 32), M.metal())
-  wheel.position.set(R + 0.1, 0, 0.32)
-  hinge.add(wheel)
-  for (let i = 0; i < 3; i++) box(hinge, 1.12, 0.07, 0.05, M.metal(), R + 0.1, 0, 0.32).rotation.z = (i * Math.PI) / 3
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2
-    cyl(hinge, 0.07, 0.07, 0.08, M.metal(), R + 0.1 + Math.cos(a) * (R - 0.25), Math.sin(a) * (R - 0.25), 0.27, 10).rotation.x = Math.PI / 2
-  }
-  box(hinge, 0.22, 2.2, 0.22, M.metal(), 0, 0, 0)
+  hinge.position.copy(tl)
+  hinge.add(door)
+  b.scene.add(hinge)
 
-  // inside: coins, to the ceiling
-  box(s, 6, 0.3, 6, steel, 0, CY - R - 0.05, -4.1)
-  box(s, 6, 6, 0.3, steel, 0, 3, -7)
-  const gold = M.gold()
-  const r = seeded(77)
-  for (let x = -1.6; x <= 1.6; x += 0.26) {
-    for (let z = -1.5; z >= -5.2; z -= 0.3) {
-      const depth = (-z - 1.5) / 3.7
-      coinStack(s, gold, x + (r() - 0.5) * 0.05, CY - R + 0.1, z, 6 + Math.floor(r() * 26 + depth * 30), 0.115)
-    }
-  }
-  const inner = new THREE.PointLight(0xdfe8ff, 0, 9, 1)
-  inner.position.set(0, 3.3, -2.6)
-  const innerBlue = new THREE.PointLight(BLUE, 0, 8, 1)
-  innerBlue.position.set(0, 1.4, -1.6)
-  s.add(inner, innerBlue)
-
-  crow(s, 'coin', { x: 2.15, z: -0.15, h: 2.05 })
-  for (let i = 0; i < 14; i++) coin(s, gold, -0.6 + r() * 2.4, 0.012, 0.2 + r() * 1.6)
-
-  const ease = (t: number) => t * t * (3 - 2 * t)
+  const ease = (x: number) => x * x * (3 - 2 * x)
   return {
-    scene: s,
-    cam: { from: [-0.9, 1.75, 8.1], to: [-1.1, 1.85, 5.6], look: [-1.25, 1.85, -1], fov: 40 },
-    focus: [0.5, 1.8, 0],
-    update(_t, _dt, p) {
-      const open = ease(THREE.MathUtils.clamp(p * 1.15, 0, 1))
-      hinge.rotation.y = -open * 1.7
-      wheel.rotation.z = open * 4
-      inner.intensity = 0.2 + open * 4.5
-      innerBlue.intensity = open * 2.5
+    ...stage(b, 0.6),
+    update(t, _dt, p) {
+      b.tick(t)
+      crowTick(c.mesh, t)
+      hinge.rotation.y = -ease(Math.min(1, p * 1.1)) * 0.22
     },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 11 THE MEMES: the ring, in 3D, around the crow
+// 11 THE MEMES: the ring around the crow on the plinth
 // ---------------------------------------------------------------------------
-function memes({ env, ring, openMeme }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [0, 7.5, 3.2], aim: [0, 1.2, 0], keyPower: 7, keyAngle: 0.5, rim: [-3.2, 4, -4.5], rimPower: 11, ambient: 0.3, fog: 0.04 })
-  ground(s)
-  cyl(s, 0.75, 0.85, 0.75, mat(0x10131f, 0.4, 0.5), 0, 0.375, 0, 40)
-  cyl(s, 0.77, 0.77, 0.03, glow(BLUE, 1.4), 0, 0.74, 0, 40)
-  crow(s, 'hero', { y: 0.76, h: 1.8, contact: false })
-  ring.group.position.y = 1.32
-  s.add(ring.group)
-  haze(s, [0, 7.5, 3.2], [0, 0.7, 0], 1.7, 0xdfe8ff, 0.07)
-
+function memes({ ring, openMeme }: SceneDeps): Stage {
+  const b = base('bg-11', 2.6, 30, { haze: ['#0d1834', 0.18] }, 0.8)
+  const c = addCrow(b, 'hero', { feet: [0.5, 0.62], height: 0.46 }, {
+    tint: '#c6d0ea', rim: '#6c98ff', rimFrom: [0.15, 1], rimAmount: 1.3, feet: 0.3,
+  })
+  // Frames about a quarter of his height wide, circling at knee height, tipped
+  // toward the camera so he stands clear above the ones in front.
+  const k = (c.height * 0.24) / 0.92
+  ring.group.scale.setScalar(k)
+  ring.group.position.copy(c.mesh.position).add(new THREE.Vector3(0, c.height * 0.2, 0))
+  ring.group.rotation.x = 0.2
+  b.scene.add(ring.group)
   return {
-    scene: s,
-    cam: { from: [0, 2.5, 6.9], to: [0, 2.05, 5.7], look: [0, 1.42, 0], fov: 40 },
-    focus: [0, 1.4, 0],
-    rise: 0.02,
+    ...stage(b, 0.5),
     clickables: ring.faces.map((face, i) => ({ object: face, onClick: () => !ring.wasDrag && openMeme(i) })),
-    update: (_t, dt) => ring.update(dt),
+    update(t, dt) {
+      b.tick(t)
+      crowTick(c.mesh, t)
+      ring.update(dt)
+    },
   }
 }
 
 // ---------------------------------------------------------------------------
-// 12 JOIN THE FLOCK: rooftop, wires, everyone's here
+// 12 JOIN THE FLOCK: rooftop, crows on the wires
 // ---------------------------------------------------------------------------
-function flock({ env }: SceneDeps): Stage {
-  const s = new THREE.Scene()
-  rig(s, { env, key: [4, 7, 5], aim: [2.4, 1.4, -1], keyPower: 5, rim: [-4, 6, -7], rimPower: 12, ambient: 0.3, fog: 0.03 })
-  ground(s, mat(0x08090f, 0.7))
-  box(s, 16, 0.5, 1.2, mat(0x151823, 0.8), 0, 0.25, -1)
-  panel(s, 34, 9, glow(0xffffff, 0.9, cityTexture()), 0, 3.4, -11)
-  ball(s, 1.25, glow(INK, 1.1), 5.2, 7.4, -10.5)
-  crow(s, 'hero', { x: 2.7, y: 0.5, z: -1, h: 1.9 })
-
-  const dark = mat(0x0a0c14, 0.55, 0.1)
-  const bird = (x: number, y: number, z: number, flip: boolean, size: number) => {
-    const g = new THREE.Group()
-    g.position.set(x, y, z)
-    g.scale.setScalar(size)
-    if (flip) g.rotation.y = Math.PI
-    ball(g, 0.16, dark, 0, 0.14, 0).scale.set(1.35, 1, 1)
-    ball(g, 0.1, dark, 0.19, 0.3, 0)
-    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.14, 8), dark)
-    beak.rotation.z = -Math.PI / 2
-    beak.position.set(0.34, 0.29, 0)
-    g.add(beak)
-    box(g, 0.28, 0.03, 0.1, dark, -0.26, 0.08, 0).rotation.z = 0.35
-    s.add(g)
-    return g
-  }
-
-  const r = seeded(15)
-  const birds: THREE.Group[] = []
-  const wireMat = mat(0x05060b, 0.6)
-  ;[
-    [2.5, -2.4],
-    [3.3, -3.1],
-    [4.1, -3.8],
-  ].forEach(([y, z], row) => {
-    const sag = (x: number) => y - 0.32 + (x * x) / 260
-    const pts = Array.from({ length: 21 }, (_, i) => new THREE.Vector3(-10 + i, sag(-10 + i), z))
-    s.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.018, 6), wireMat))
-    for (let x = -5.5 + row * 0.7; x < 6; x += 0.9 + r() * 1.5) birds.push(bird(x, sag(x), z, r() < 0.4, 0.85 + r() * 0.35))
+function flock(): Stage {
+  const b = base('bg-12', 2.2, 34, { haze: ['#0b1736', 0.12] })
+  const c = addCrow(b, 'hero', { feet: [0.64, 0.88], height: 0.62 }, {
+    tint: '#aebbdc', rim: '#d6e4ff', rimFrom: [0.5, 1], rimAmount: 1.2, feet: 0.35,
   })
-  for (const x of [-8, 8]) cyl(s, 0.09, 0.11, 6, wireMat, x, 3, -3.1)
-  const gold = M.gold()
-  for (let i = 0; i < 9; i++) coin(s, gold, -1.8 + r() * 4.5, 0.512, -1.2 + r() * 0.5)
-
+  const bird = canvasTexture(128, 96, (x) => {
+    x.fillStyle = '#04050a'
+    x.beginPath()
+    x.ellipse(58, 58, 30, 20, -0.35, 0, Math.PI * 2)
+    x.fill()
+    x.beginPath()
+    x.arc(84, 34, 14, 0, Math.PI * 2)
+    x.fill()
+    x.beginPath()
+    x.moveTo(94, 30)
+    x.lineTo(122, 38)
+    x.lineTo(94, 42)
+    x.fill()
+    x.beginPath()
+    x.moveTo(36, 66)
+    x.lineTo(2, 84)
+    x.lineTo(12, 92)
+    x.lineTo(44, 74)
+    x.fill()
+    x.fillRect(52, 74, 3, 16)
+    x.fillRect(64, 74, 3, 16)
+  })
+  // Points along the two wires in the photo.
+  const perches: [number, number][] = [
+    [0.12, 0.155], [0.2, 0.18], [0.33, 0.205], [0.41, 0.215], [0.55, 0.222], [0.6, 0.218],
+    [0.74, 0.2], [0.82, 0.18], [0.18, 0.262], [0.47, 0.272], [0.66, 0.255], [0.86, 0.205],
+  ]
+  const z = b.space.far * 0.3
+  const size = b.space.span(0.045, z)
+  const birds = perches.map(([u, v], i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size * 1.33, size), new THREE.MeshBasicMaterial({ map: bird, transparent: true, depthWrite: false }))
+    const p = b.space.at(u, v, z)
+    m.position.set(p.x, p.y + size * 0.42, p.z)
+    if (i % 3 === 1) m.scale.x = -1
+    b.scene.add(m)
+    return m
+  })
   return {
-    scene: s,
-    cam: { from: [0, 2.3, 8.6], to: [0, 2.7, 6.6], look: [0, 3, -2.4], fov: 40 },
-    focus: [2.3, 2.6, -2],
-    // every so often one of them shuffles along the wire
+    ...stage(b, 0.6),
     update(t) {
-      birds.forEach((b, i) => (b.rotation.z = Math.max(0, Math.sin(t * 1.4 + i * 2.1) - 0.93) * 2.2))
+      b.tick(t)
+      crowTick(c.mesh, t)
+      birds.forEach((m, i) => (m.rotation.z = Math.max(0, Math.sin(t * 1.3 + i * 2.1) - 0.94) * 2.5))
     },
   }
 }
 
 export function buildStages(deps: SceneDeps): Stage[] {
-  return [hero, office, stage, post, interview, broadcast, chart, cheers, ask, token, memes, flock].map((build) => build(deps))
+  return [hero(), office(), onStage(deps), post(), interview(), broadcast(), chart(), cheers(), ask(), token(), memes(deps), flock()]
 }

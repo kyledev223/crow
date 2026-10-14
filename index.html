@@ -39,19 +39,24 @@
     <!-- The 3D scene. Everything else sits on top of it. -->
     <canvas id="gl" aria-hidden="true"></canvas>
 
-    <!-- 0. Loader: counts over heavy static, then the picture flips on -->
+    <!-- 0. Loader: brand, a big 000 → 100 counter, a status line -->
     <div class="boot" id="boot" role="status" aria-label="Loading Coupon Crows">
-      <span class="brand"><span class="slashes" aria-hidden="true">//////</span> Coupon Crows</span>
-      <div class="boot__count" id="bootCount" aria-hidden="true">000</div>
-      <p class="boot__status" id="bootStatus">Collecting shiny things…</p>
+      <div class="boot__top">
+        <span class="brand"><span class="slashes" aria-hidden="true">//////</span> Coupon Crows</span>
+        <span class="boot__tagline">Collecting shiny returns.</span>
+      </div>
+      <div class="boot__bottom">
+        <div class="boot__count" id="bootCount" aria-hidden="true">000</div>
+        <p class="boot__status" id="bootStatus">Collecting shiny things…</p>
+      </div>
       <div class="boot__bar" aria-hidden="true"><i id="bootBar"></i></div>
     </div>
 
-    <!-- Entry screen: the hero scene is live behind these buttons -->
+    <!-- Entry: the particle field is live behind these -->
     <div class="entry" id="entry" hidden>
       <div class="entry__actions">
-        <button class="btn btn--primary" type="button" data-enter="sound">Enter</button>
-        <button class="btn" type="button" data-enter="silent">Enter without sound</button>
+        <button class="pill" type="button" data-enter="sound">Enter</button>
+        <button class="textlink" type="button" data-enter="silent">Enter without sound</button>
       </div>
       <p class="entry__hint">Best with sound · change or mute the music from the corner</p>
     </div>
@@ -100,7 +105,7 @@
 
     <!-- Static and scanlines over the whole page, so the UI matches the picture -->
     <div class="static" aria-hidden="true"></div>
-    <div class="cursor" id="cursor" aria-hidden="true"></div>
+    <div class="cursor" id="cursor" aria-hidden="true"><i class="cursor__ring"></i><i class="cursor__dot"></i></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

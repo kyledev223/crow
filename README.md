@@ -2,7 +2,7 @@
 
 A twelve-screen, full-viewport site for a **fictional** community art project. No real token, contract, company or people are involved. Every quote is from a made-up bird.
 
-Each screen is a live 3D scene (Three.js) seen through a pixel / static filter, with the text and buttons on top. Built with Vite, vanilla TypeScript, Three.js and GSAP. The scenes are blockout geometry, the music is generated in the browser, and the fonts are bundled. The only things you supply are the crow images.
+Each screen is a photo backplate rebuilt in 3D from its depth map, with the crow composited onto its floor and a few live layers, all seen through a pixel / dither filter. The site opens on a particle field. Built with Vite, vanilla TypeScript, Three.js and GSAP. The music is generated in the browser and the fonts are bundled.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Each screen is a live 3D scene (Three.js) seen through a pixel / static filter, 
 npm install
 npm run dev       # dev server, http://localhost:5173
 npm run dev:phone # same, but reachable from your phone, with a QR code
-npm run assets    # turn images in assets-raw/ into transparent crow cutouts
+npm run assets    # prepare everything in assets-raw/ for the site (see below)
 npm run build     # regenerate share images, type-check, build to dist/
 npm run preview   # serve the built site
 npm run og        # regenerate the share image on its own
@@ -18,55 +18,59 @@ npm run og        # regenerate the share image on its own
 
 Needs Node 22.18 or newer.
 
-## The crow images
+## Assets
 
-The crow appears in the scenes as transparent PNG cutouts on planes inside the 3D world, lit by each scene's lights. They live in `public/assets/crow/`. **Any file that is missing is replaced by a dark silhouette of a figure in a suit, labelled with the filename it is waiting for**, so the site always runs.
+Everything visual you supply goes in `assets-raw/`. `npm run assets` turns it into what the site loads, in `public/assets/`. Nothing is ever pre-pixelated: the filter runs over the finished picture in the browser.
 
-| File | Pose | Used on |
+| In `assets-raw/` | Becomes | Used on |
 |---|---|---|
-| `crow-hero.png` | Standing, facing the camera | 01 The crow, 11 The memes, 12 Join the flock (and 07 if there is no video) |
-| `crow-seated.png` | Seated | 02 Why the name, 05 The interview, 06 Broadcast |
-| `crow-stage.png` | Presenting | 03 On stage |
-| `crow-phone.png` | Holding a phone | 04 The post |
-| `crow-toast.png` | Raising a glass | 08 Cheers |
-| `crow-laptop.png` | At a laptop | 09 Ask the crow |
-| `crow-coin.png` | Holding a coin | 10 The token |
-| `walk.mp4` | Walk cycle filmed on **solid green** | 07 The chart |
+| `bg-01` … `bg-12` (png or jpg) | `public/assets/bg/bg-NN.jpg` + `bg-NN-depth.png` | One backplate per screen, in order |
+| `crow-hero.png` | `public/assets/crow/crow-hero.png` (background removed) | Every screen without its own pose yet |
+| `crow-seated.png` | same, cut out | 02 office, 05 interview, 06 broadcast (in the chair) |
+| `crow-stage.png` | same | 03 on stage |
+| `crow-phone.png` | same | 04 the post |
+| `crow-toast.png` | same | 08 cheers |
+| `crow-laptop.png` | same | 09 ask the crow (at the desk) |
+| `crow-coin.png` | same | 10 the token |
+| `walk.mp4` (filmed on solid green) | `walk.webm` + `walk.mp4` + `walk.json` | 07 the chart |
 
-### Making them: `npm run assets`
+**Missing poses.** Until a pose exists, crow-hero stands in. On the seated screens (02, 05, 06, 09) he stands beside the chair instead of sitting in it; drop `crow-seated.png` or `crow-laptop.png` in and run `npm run assets`, and he sits. If crow-hero itself is missing, a dark labelled silhouette stands in.
 
-1. Put your source images in `assets-raw/`, named as in the table (`crow-hero.jpg`, `crow-seated.png`, …). Any of png, jpg, webp works; the output is always `.png`.
-2. Run `npm run assets`.
-3. Each image has its background removed, is trimmed to the figure, shrunk to at most 2048px on its longest side, and saved to `public/assets/crow/` under the same name. `walk.mp4` is copied as it is: its green background is removed live, in the browser.
-4. Restart nothing: the dev server reloads when files land in `public/assets/crow/`.
+**What `npm run assets` does**
 
-Background removal is done by [rembg](https://github.com/danielgatis/rembg), a Python tool. The first run creates a private Python environment in `.venv-assets/` and installs rembg into it (a few hundred MB, a few minutes), then downloads its model (about 170 MB). Nothing is installed system-wide; delete `.venv-assets/` to get the space back.
+- *Crow images:* removes the background (rembg), trims to the figure, shrinks to at most 2048px, and darkens the invisible pixels so no backdrop colour bleeds into the edges.
+- *Backplates:* saves a web-sized JPEG and generates a depth map with Depth Anything V2 (small). The site displaces a mesh with it, so the photo gets real parallax when the cursor moves.
+- *Walk cycle:* crops the generator's watermark off the bottom (staying below his feet), strips the audio, finds the two most alike frames at least half the clip apart and trims to that loop, crossfades the seam over six frames, keys out the green with spill suppression (the blue feathers keep their blue), and exports VP9 WebM with real transparency plus an H.264 MP4 on pure green for Safari, which is keyed in the browser. `walk.json` records the loop length and which frame is the "standing" one he rests on.
 
-- **No Python?** The script says so and stops. Install Python 3.10–3.13 from <https://www.python.org/downloads/> (on Windows, tick "Add python.exe to PATH"), reopen the terminal, run it again.
-- **Rather not?** Skip the tool. Any transparent PNG saved straight into `public/assets/crow/` with the right name works.
+Outputs that are already newer than their source are skipped. `npm run assets -- --force` redoes everything.
 
-Tips: full-body, evenly lit shots against a plain background cut out best. For `walk.mp4`, film side-on against an evenly lit pure green; the walker is moved along the chart by the scroll, so a walk-on-the-spot loop is ideal.
+**First run.** The script builds a private Python environment in `.venv-assets/` and installs rembg, onnxruntime and Pillow there (a few hundred MB, a few minutes), then downloads two models: rembg's (about 170 MB) and Depth Anything (about 100 MB). Nothing is installed system-wide; delete `.venv-assets/` to get the space back. The walk cycle also needs ffmpeg on the PATH (<https://ffmpeg.org/download.html>); without it the video is copied unprocessed.
 
-Positions, sizes and which pose goes where are set per scene in `src/gl/scenes.ts` (look for `crow(s, 'hero', { … })`; `h` is the height in metres, `flip: true` mirrors it).
+- **No Python?** The script says so and stops. Install Python 3.10 or newer from <https://www.python.org/downloads/> (on Windows, tick "Add python.exe to PATH"), reopen the terminal, run it again.
+
+**Reference images.** `reference-entry.png` and `crow-pixel-medium.png` in the project root are for comparison only. They are git-ignored and never part of the site.
+
+**Placing the crow.** Each screen's entry in `src/gl/scenes.ts` says where his soles touch the floor (`feet`, as a fraction across and down the photo) and how tall he stands (`height`, a fraction of the frame). When his feet are hidden behind furniture, `depthAt` names a visible pixel at the same distance. Each also sets how he is lit to match the plate: `tint`, a `rim` light colour and the direction it comes from.
 
 ## Where things live
 
 ```
-index.html              canvas, loader, entry screen, site chrome, lightbox
+index.html              canvas, loader, entry, site chrome, lightbox
 src/
   main.ts               boot order and wiring
-  fx-config.ts          EVERY strength for the pixel/static look, in one object
+  fx-config.ts          EVERY strength for the look: blocks, palette, dither, lens, entry particles
   screens.ts            the twelve screens: names, URL hashes, all the copy
   nav.ts                screen-by-screen navigation (wheel, keys, swipe, rail, hashes)
-  boot.ts               loader count → CRT flip → entry screen
-  assets.ts             crow asset manifest and the labelled placeholder
+  boot.ts               loader → particle entry → fly-through into screen 01
+  assets.ts             asset manifest: plates, crow poses, walk cycle, placeholders
   gl/
-    engine.ts           renderer, camera, parallax, cursor lens, render loop
-    post.ts             the full-screen shader: pixels, dither, grain, scanlines, glitch
-    kit.ts              building blocks: materials, props, lights, haze, the crow cutout
-    scenes.ts           the twelve 3D scenes, in page order
+    engine.ts           renderer, two render modes (entry / site), camera, parallax, lens
+    entry.ts            the particle field, sphere and rings, and its light post pass
+    post.ts             the site pixel filter: blocks, contrast, palette dither, static, scanlines
+    plate.ts            backplate-from-depth, crow compositing, dust, layers pinned to the photo
+    scenes.ts           the twelve scenes, in page order
     ring.ts             the 3D meme ring (drag, inertia, snap)
-  cursor.ts             custom cursor ring
+  cursor.ts             ring + dot cursor
   lightbox.ts           meme viewer and the keynote video slot
   config.ts             contract address, links, stats, keynote video
   token.ts              turns config into disabled placeholders or live controls
@@ -80,26 +84,28 @@ scripts/
   assets.mjs, assets.py the `npm run assets` pipeline
   dev-phone.mjs         the `dev:phone` server and QR code
   og.mjs                share image and icons
-assets-raw/             your source images go here
-public/assets/crow/     the finished cutouts end up here
+assets-raw/             your source files go here
+public/assets/          what the site loads (written by npm run assets)
 ```
 
 ## The twelve screens
 
-| # | Hash | Screen | Scene |
-|---|---|---|---|
-| 01 | `#crow` | The crow | Centre stage, one spotlight, haze, gold coins on the floor |
-| 02 | `#name` | Why the name | Dim office: desk, leather chair, desk lamp, city in the window |
-| 03 | `#stage` | On stage | Keynote stage, big screen (click it), audience in silhouette |
-| 04 | `#post` | The post | The crow and his phone; a large post card floating beside him |
-| 05 | `#interview` | The interview | Two armchairs, a round table, a mic and two waters, a fire |
-| 06 | `#broadcast` | Broadcast | News desk, wall of monitors, scrolling ticker, ON AIR light |
-| 07 | `#chart` | The chart | A glowing candlestick chart; the crow walks up the line as you scroll |
-| 08 | `#cheers` | Cheers | Bar table and glasses, back bar, pendant lamp |
-| 09 | `#ask` | Ask the crow | Laptop on a desk; question bubbles float up, more as you scroll |
-| 10 | `#token` | The token | A vault door that opens as you scroll, onto stacks of coins |
-| 11 | `#memes` | The memes | The meme ring in 3D around the crow: drag, flick, click to open |
-| 12 | `#flock` | Join the flock | Rooftop, wires full of crows; join buttons, token panel, disclaimer |
+| # | Hash | Screen | Plate | Live layers |
+|---|---|---|---|---|
+| 01 | `#crow` | The crow | bg-01 spotlit floor, coins | dust in the beam |
+| 02 | `#name` | Why the name | bg-02 office | lamp glow |
+| 03 | `#stage` | On stage | bg-03 keynote stage | the big screen shows a slide; click it for the video lightbox |
+| 04 | `#post` | The post | bg-04 penthouse | (the post itself is a card in the copy) |
+| 05 | `#interview` | The interview | bg-05 fireside | firelight flickers on the room and on him |
+| 06 | `#broadcast` | Broadcast | bg-06 news desk | six monitors, a scrolling ticker, a blinking ON AIR sign |
+| 07 | `#chart` | The chart | bg-07 long wall | he walks the floor while the room scrolls past; the chart is drawn on the wall |
+| 08 | `#cheers` | Cheers | bg-08 bar | pendant glow |
+| 09 | `#ask` | Ask the crow | bg-09 desk by the window | laptop glow; question bubbles float up |
+| 10 | `#token` | The token | bg-10 vault | the vault door swings a little further open as you scroll |
+| 11 | `#memes` | The memes | bg-11 plinth | the meme ring circles him |
+| 12 | `#flock` | Join the flock | bg-12 rooftop | crows sitting on the power lines |
+
+Every screen also has dust that only shows where the photo is lit (so it gathers in light beams), haze on distant layers, a soft contact shadow under him, a touch of depth of field behind him, and slow camera breathing.
 
 Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}` to highlight it in blue.
 
@@ -108,28 +114,25 @@ Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}
 - **Wheel / trackpad.** Each screen holds for about 1.5 viewport-heights of scrolling, which drives its camera push-in and reveals its text. Keep pushing at the end and a one-second transition carries you to the next screen. Scrolling up does the reverse.
 - **Keys.** Arrow down/up and Space step through a screen, then on to the next. Page Down/Up jump a whole screen. Home and End go to the first and last.
 - **Touch.** One swipe, one screen; the screen's reveal then plays by itself.
-- **Side rail.** Twelve numbered ticks on the right; hover for the name, click to jump. On phones it becomes a strip of dots.
+- **Side rail.** Twelve numbered ticks on the right edge. The active screen's number and name show in blue; hover any other for its name; click to jump. On phones it becomes a slim strip.
 - **Links.** Every screen has a hash (`…/#chart`), so links land on the right screen and the browser's Back and Forward buttons move between screens.
+- **The chart (07).** Scrolling slides the room past; he walks at a speed that follows your scrolling, turns round if you scroll back, and when you stop he finishes his stride and rests on the standing frame.
 
 ## Tuning the look: `src/fx-config.ts`
 
-Everything about the pixel / static treatment is one object with comments. The ones you will reach for first:
-
 | Setting | What it does |
 |---|---|
-| `pixelSize` | Block size in CSS pixels (3–4 is the intended look; 1 switches pixelation off) |
-| `palette` | The eight colours the 3D picture is reduced to |
-| `dither` | 0 = flat bands, 1 = full ordered (Bayer) dithering |
-| `exposure`, `contrast` | Brightness and punch before the palette step |
-| `grain`, `scanlines`, `vignette` | Animated static, scanline darkness, corner darkening |
-| `chroma` | Red/blue fringing toward the edges |
-| `glitch` | Strength of the tear on screen transitions |
-| `lens.*` | The cursor lens: radius, magnification, bigger blocks, extra fringe, ripple |
-| `parallax.*` | How far and how lazily the camera follows the cursor |
-| `lite.pixelSize` | Block size in lite mode (bigger = smaller internal render) |
+| `blocksAt1080` | Block size: screen pixels per block at 1080px viewport height (scales with the viewport). 7 is the intended look |
+| `palette` | The colours the picture is reduced to: near-black, greys, off-whites, blues, and three golds |
+| `dither` | 0 = flat bands, 1 = full 4×4 Bayer dithering |
+| `contrast`, `gamma`, `exposure` | Grading before the palette step (1.3 contrast and 0.8 gamma keep the crow's dark head readable) |
+| `static`, `scanlines`, `split` | Per-pixel animated static, every-third-line darkening, red/blue offset in pixels |
+| `vignette`, `glitch` | Corner darkening; strength of the transition tear |
+| `lens.*` | The invisible cursor magnifier: diameter at 1080p, zoom, extra red/blue split, ripple |
+| `parallax.*`, `breathing.*` | How the camera follows the cursor, and its slow handheld drift |
+| `lite.blocksAt1080` | Block size in lite mode (bigger = smaller internal render) |
+| `entry.*` | The particle entry: particle counts, cursor push, grain, diagonal scanlines, edge split |
 | `dom.*` | The overlay on the text and UI: page static, page scanlines, headline RGB split, headline jitter |
-
-Scene lighting and layout live in `src/gl/scenes.ts`; each scene is a short function, and the `cam` line at the bottom of each sets where the camera starts, where it ends, and what it looks at.
 
 ## Going live: contract address, buy buttons, keynote video
 
@@ -223,7 +226,7 @@ Repeat steps 5 and 6 whenever you change the site. If you later add your own dom
 
 ## Share image and meta tags
 
-`npm run og` (also the first step of `npm run build`) writes `public/og.png` and the home-screen icon. **The share image still shows the earlier drawn crow mascot** (`src/crow-art.ts`), not your new crow-man art; edit `scripts/og.mjs` once the real artwork exists, or replace `public/og.png` by hand with a 1200×630 image and remove `og` from the build script.
+`npm run og` (also the first step of `npm run build`) writes `public/og.png` and the home-screen icon. **The share image still shows the earlier drawn crow mascot** (`src/crow-art.ts`), not the crow-man; edit `scripts/og.mjs` to use `public/assets/crow/crow-hero.png` and a plate, or replace `public/og.png` by hand with a 1200×630 image and remove `og` from the build script.
 
 Social crawlers need an absolute image URL, which is built from `VITE_SITE_URL`. See "Deploy" above for when you need to set it by hand. With it empty, `og:image` stays relative (`/og.png`), which is fine locally but will not unfurl on most platforms.
 
@@ -237,13 +240,13 @@ Social crawlers need an absolute image URL, which is built from `VITE_SITE_URL`.
 
 ## Behaviour notes
 
-- **Loader and entry.** The loader counts 000 → 100 over heavy static while every scene is drawn once behind it (so nothing stutters later). At 100 the picture collapses to a line and springs open on the live hero scene, where "Enter" and "Enter without sound" wait. Scrolling is locked until one is chosen; audio starts inside that click, as browsers require.
-- **Mouse.** The camera leans toward the cursor in every scene. A lens around the cursor magnifies the picture, enlarges its blocks and splits its colours. The cursor ring grows over anything clickable, in the page or in the scene, and goes dashed over disabled controls.
+- **Loader and entry.** The loader shows the brand, a big 000 → 100 counter and a status line while every scene is drawn once behind it (so nothing stutters later). At 100 it fades into a live particle field: a glowing sphere with two rings, "Enter" and "Enter without sound". Scrolling is locked until one is chosen; audio starts inside that click, as browsers require. On Enter the camera flies through the sphere and screen 01 comes up out of the flash.
+- **Mouse.** Each photo has real depth, so the camera leaning toward the cursor gives true parallax (near things move more than far ones). An invisible lens around the cursor magnifies the picture slightly, with a little extra red/blue split; there is no visible outline. The cursor itself is a thin ring with a dot: the dot is exactly on the pointer, the ring follows with a little easing, grows over anything clickable, and dims over disabled controls. On the entry screen, particles near the cursor drift out of its way.
 - **Touch.** No lens. The camera drifts slowly on its own, or follows device tilt on browsers that provide it without asking (not iOS).
 - **Music.** One chain for all tracks: master gain → gentle compressor → limiter. Tracks are loudness-matched, crossfade on change, fade on mute, and pause while the tab is hidden. On iPhones the page declares itself as media playback so the music plays with the ringer switch on silent.
-- **Lite mode.** For the first 1.5 seconds the site times its frames. A median under 30fps turns lite mode on: the 3D picture renders smaller (bigger blocks), colour fringing and the lens ripple are dropped, and the page static stops animating. Pixelation and static stay. If the device then holds 50+ fps for 3 seconds, full quality returns. `?lite=1` and `?lite=0` override this.
-- **Reduced motion.** With `prefers-reduced-motion`, there is no scroll-jacking: the twelve screens are an ordinary page that snaps one screen at a time, all copy is simply visible, and there is no lens, no glitch, no jitter and no moving static (still grain only).
-- **No WebGL.** The 3D scenes need WebGL 2. Every current browser has it.
+- **Lite mode.** For the first 1.5 seconds the site times its frames. A median under 30fps turns lite mode on: bigger blocks (a smaller internal render), no red/blue split and no lens ripple, and the page static stops animating. Pixelation and static stay. If the device then holds 50+ fps for 3 seconds, full quality returns. `?lite=1` and `?lite=0` override this.
+- **Reduced motion.** With `prefers-reduced-motion`, there is no scroll-jacking: the twelve screens are an ordinary page that snaps one screen at a time, all copy is simply visible, the entry has no fly-through, and there is no lens, no glitch, no jitter and no moving static.
+- **No WebGL.** The scenes need WebGL 2. Every current browser has it.
 
 ## Disclaimer
 

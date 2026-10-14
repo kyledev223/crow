@@ -2,13 +2,16 @@ import { existsSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, loadEnv } from 'vite'
 
-const CROW_DIR = resolve(process.cwd(), 'public/assets/crow')
+const ASSETS = resolve(process.cwd(), 'public/assets')
+const CROW_DIR = resolve(ASSETS, 'crow')
+const BG_DIR = resolve(ASSETS, 'bg')
+const list = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(png|jpe?g|mp4|webm|json)$/i.test(f)) : [])
 
 /**
  * `virtual:crow-assets` tells the app which files exist in
- * public/assets/crow, so it can show a labelled placeholder for the missing
- * ones without firing off requests that 404. The dev server reloads when a
- * file is added or removed there.
+ * public/assets/crow and public/assets/bg, so it can show a labelled
+ * placeholder for the missing ones without firing off requests that 404. The
+ * dev server reloads when a file is added or removed there.
  */
 function crowAssets() {
   const id = 'virtual:crow-assets'
@@ -17,14 +20,14 @@ function crowAssets() {
     resolveId: (source) => (source === id ? '\0' + id : null),
     load(source) {
       if (source !== '\0' + id) return null
-      const files = existsSync(CROW_DIR) ? readdirSync(CROW_DIR).filter((f) => /\.(png|mp4|webm)$/i.test(f)) : []
-      return `export const available = ${JSON.stringify(files)}`
+      return `export const available = ${JSON.stringify(list(CROW_DIR))}
+export const plates = ${JSON.stringify(list(BG_DIR))}`
     },
     configureServer(server) {
-      server.watcher.add(CROW_DIR)
+      server.watcher.add(ASSETS)
       const refresh = (file) => {
         // Windows reports drive letters in either case, so compare case-insensitively.
-        if (!resolve(file).toLowerCase().startsWith(CROW_DIR.toLowerCase())) return
+        if (!resolve(file).toLowerCase().startsWith(ASSETS.toLowerCase())) return
         const mod = server.moduleGraph.getModuleById('\0' + id)
         if (mod) server.moduleGraph.invalidateModule(mod)
         server.ws.send({ type: 'full-reload' })

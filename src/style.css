@@ -21,7 +21,7 @@
   --f-body: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --gutter: clamp(16px, 4vw, 56px);
-  --rail: 64px; /* room kept clear for the side nav */
+  --rail: 180px; /* room kept clear for the side nav */
   --h-display: clamp(2.5rem, min(6.6vw, 12.5vh), 8rem);
 
   --fx-grain: 0.1;
@@ -134,13 +134,7 @@ code {
   animation: static 0.5s steps(1) infinite;
   transition: opacity 0.6s;
 }
-/* Heavy static while the loader counts; the site chrome waits its turn. */
-html.is-booting #site {
-  visibility: hidden;
-}
-html.is-booting .static::before {
-  opacity: 0.5;
-}
+
 @keyframes static {
   0% { transform: translate(0, 0); }
   20% { transform: translate(-50px, 40px); }
@@ -344,36 +338,44 @@ html.no-jitter .display {
 }
 
 /* ==========================================================================
-   0. Loader and entry screen
+   0. Loader (brand, big counter, status) and the particle entry
    ========================================================================== */
 .boot {
   position: fixed;
   inset: 0;
   z-index: 80;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: clamp(18px, 3vw, 32px) var(--gutter) clamp(28px, 4vw, 48px);
+  background:
+    radial-gradient(70% 55% at 20% 100%, rgba(47, 123, 255, 0.16), transparent 70%),
+    var(--bg);
 }
-.boot .brand {
-  text-shadow: 0 0 12px var(--bg);
+.boot__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font: 400 0.72rem/1 var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.boot__top .brand {
+  color: var(--ink);
 }
 .boot__count {
-  align-self: end;
   font: 500 clamp(6rem, 24vw, 20rem) / 0.8 var(--f-mono);
   letter-spacing: -0.07em;
   color: var(--accent);
+  text-shadow: 0 0 80px var(--accent-glow);
   font-variant-numeric: tabular-nums;
   margin-left: -0.04em;
-  text-shadow:
-    -4px 0 0 rgba(237, 238, 242, 0.85),
-    4px 0 0 var(--split-red),
-    0 0 60px var(--bg);
 }
 .boot__status {
-  margin-top: 18px;
-  font: 500 0.8rem/1.4 var(--f-mono);
+  margin-top: 22px;
+  font: 400 0.8rem/1.4 var(--f-mono);
   letter-spacing: 0.04em;
-  text-shadow: 0 0 10px var(--bg), 0 0 4px var(--bg);
 }
 .boot__status::before {
   content: '> ';
@@ -384,7 +386,7 @@ html.no-jitter .display {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
+  height: 2px;
   background: var(--line);
 }
 .boot__bar i {
@@ -399,11 +401,11 @@ html.no-jitter .display {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: clamp(24px, 7vh, 72px);
+  bottom: clamp(48px, 15vh, 150px);
   z-index: 30;
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: 22px;
   padding: 0 var(--gutter);
   text-align: center;
 }
@@ -413,18 +415,58 @@ html.no-jitter .display {
 .entry__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 14px 28px;
 }
-.entry__actions .btn {
-  min-height: 54px;
-  min-width: 170px;
+.pill {
+  min-width: 168px;
+  height: 62px;
+  padding: 0 44px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font: 600 1.05rem/1 var(--f-body);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 26px rgba(47, 123, 255, 0.55),
+    0 0 70px rgba(47, 123, 255, 0.25);
+  transition:
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+.pill:hover {
+  transform: scale(1.03);
+  box-shadow:
+    0 0 34px rgba(47, 123, 255, 0.75),
+    0 0 90px rgba(47, 123, 255, 0.35);
+}
+.textlink {
+  padding: 6px 0;
+  font: 500 0.68rem/1 var(--f-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-color: rgba(237, 238, 242, 0.35);
+}
+.textlink:hover {
+  color: var(--ink);
+  text-decoration-color: var(--accent);
 }
 .entry__hint {
-  font: 400 0.68rem/1.5 var(--f-mono);
-  letter-spacing: 0.05em;
-  color: var(--ink-dim);
-  text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg);
+  max-width: 36ch;
+  font: 400 0.64rem/1.7 var(--f-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+/* While the loader and the entry are up, the site chrome waits its turn. */
+html.is-booting #site,
+html.is-entry #site {
+  visibility: hidden;
 }
 
 /* ==========================================================================
@@ -444,10 +486,11 @@ html.no-jitter .display {
   text-shadow: 0 0 10px var(--bg), 0 0 3px var(--bg);
 }
 
-/* Side nav: twelve ticks. Name slides out on hover; the active one is blue. */
+/* Side nav: twelve big ticks on the right edge. The active one shows its
+   number and name in blue; the others show their name on hover. */
 .rail {
   position: fixed;
-  right: 14px;
+  right: 10px;
   top: 50%;
   z-index: 20;
   display: grid;
@@ -458,29 +501,27 @@ html.no-jitter .display {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  height: 26px;
-  padding-left: 12px;
-  font: 500 0.62rem/1 var(--f-mono);
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px 0 24px;
+  font: 500 0.82rem/1 var(--f-mono);
   letter-spacing: 0.08em;
   text-decoration: none;
   color: var(--ink-faint);
-  text-shadow: 0 0 6px var(--bg), 0 0 2px var(--bg);
+  text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg);
 }
 .rail__tick i {
   display: block;
-  width: 12px;
+  width: 22px;
   height: 2px;
   background: currentColor;
   transition: width 0.2s;
 }
 .rail__name {
-  padding: 5px 8px;
-  background: var(--accent);
-  color: #fff;
+  font-size: 0.74rem;
   text-transform: uppercase;
   white-space: nowrap;
-  text-shadow: none;
+  color: var(--ink);
   opacity: 0;
   transform: translateX(8px);
   transition:
@@ -498,14 +539,20 @@ html.no-jitter .display {
   transform: none;
 }
 .rail__tick:hover i {
-  width: 20px;
+  width: 32px;
 }
 .rail__tick.is-active {
   color: var(--accent);
 }
+.rail__tick.is-active .rail__name {
+  opacity: 1;
+  transform: none;
+  color: var(--accent);
+}
 .rail__tick.is-active i {
-  width: 26px;
-  box-shadow: 0 0 10px var(--accent);
+  width: 44px;
+  height: 3px;
+  box-shadow: 0 0 12px var(--accent);
 }
 
 .sound,
@@ -778,8 +825,8 @@ html.is-native {
   display: flex;
   justify-content: center;
   gap: 0.22em;
-  margin-top: 1.5vh;
-  font-size: min(16.4vw, 40vh);
+  margin-top: 0.5vh;
+  font-size: min(10.5vw, 19vh);
   line-height: 0.9;
   white-space: nowrap;
   text-shadow:
@@ -861,11 +908,17 @@ html:not(.is-reduced) [data-after-enter] {
   justify-items: center;
   text-align: center;
 }
+/* Heading tucked top-left, so the crow on his plinth keeps the middle. */
 .memes__head {
   display: grid;
-  justify-items: center;
+  justify-self: start;
+  justify-items: start;
   gap: 10px;
+  text-align: left;
   pointer-events: none;
+}
+.memes__head .display {
+  font-size: clamp(2.2rem, min(5vw, 9vh), 5.5rem);
 }
 .ringkeys {
   align-self: end;
@@ -970,6 +1023,46 @@ html:not(.is-reduced) [data-after-enter] {
 .lightbox__close {
   justify-self: end;
 }
+.card--post header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.card--post header span:last-child {
+  display: grid;
+  font: 500 0.8rem/1.4 var(--f-mono);
+}
+.card--post header small {
+  font: 400 0.66rem/1.4 var(--f-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.card__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: rgba(47, 123, 255, 0.15) url('/favicon.svg') center / 78% no-repeat;
+}
+.card--post p {
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+  line-height: 1.3;
+  font-weight: 500;
+}
+.card--post footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font: 400 0.66rem/1.5 var(--f-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
 .lightbox__stage {
   aspect-ratio: 4 / 5;
   border: 1px solid var(--accent);
@@ -1042,7 +1135,8 @@ html:not(.is-reduced) [data-after-enter] {
 }
 
 /* ==========================================================================
-   Custom cursor (mouse only; cursor.ts adds .has-cursor)
+   Custom cursor (mouse only; cursor.ts adds .has-cursor): a thin ring that
+   eases after the pointer, and a dot that sits exactly on it
    ========================================================================== */
 .cursor {
   display: none;
@@ -1053,12 +1147,9 @@ html.has-cursor * {
 }
 html.has-cursor .cursor {
   position: fixed;
-  left: 0;
-  top: 0;
+  inset: 0;
   z-index: 99;
   display: block;
-  width: 0;
-  height: 0;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
@@ -1066,51 +1157,48 @@ html.has-cursor .cursor {
 html.has-cursor .cursor.is-on {
   opacity: 1;
 }
-.cursor::before,
-.cursor::after {
-  content: '';
+.cursor__ring,
+.cursor__dot {
   position: absolute;
   left: 0;
   top: 0;
+  display: block;
+  will-change: transform;
+}
+.cursor__ring::before,
+.cursor__dot::before {
+  content: '';
+  position: absolute;
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
-/* ring */
-.cursor::before {
-  width: 34px;
-  height: 34px;
-  border: 1.5px solid var(--ink);
-  box-shadow:
-    -2px 0 0 var(--accent),
-    2px 0 0 var(--split-red);
+.cursor__ring::before {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(237, 238, 242, 0.85);
   transition:
-    width 0.18s,
-    height 0.18s,
-    border-color 0.18s,
-    background-color 0.18s;
+    width 0.2s,
+    height 0.2s,
+    opacity 0.2s,
+    border-color 0.2s;
 }
-/* dot */
-.cursor::after {
+.cursor__dot::before {
   width: 4px;
   height: 4px;
   background: var(--ink);
 }
-.cursor.is-hot::before {
-  width: 62px;
-  height: 62px;
+.cursor.is-hot .cursor__ring::before {
+  width: 40px;
+  height: 40px;
   border-color: var(--accent);
-  background: rgba(47, 123, 255, 0.16);
 }
-.cursor.is-blocked::before {
-  width: 44px;
-  height: 44px;
-  border-style: dashed;
-  border-color: var(--grey);
-  box-shadow: none;
+.cursor.is-blocked .cursor__ring::before,
+.cursor.is-blocked .cursor__dot::before {
+  opacity: 0.35;
 }
-.cursor.is-down::before {
-  width: 24px;
-  height: 24px;
+.cursor.is-down .cursor__ring::before {
+  width: 22px;
+  height: 22px;
 }
 
 /* ==========================================================================
@@ -1137,7 +1225,7 @@ html.has-cursor .cursor.is-on {
    ========================================================================== */
 @media (max-width: 899px) {
   :root {
-    --rail: 14px;
+    --rail: 34px;
     --h-display: clamp(2.2rem, min(12.5vw, 7.4vh), 4.6rem);
   }
   .screen {
@@ -1211,32 +1299,33 @@ html.has-cursor .cursor.is-on {
     line-height: 1.4;
   }
 
-  /* compact dot strip */
+  /* slim strip on the right that still fits all twelve */
   .rail {
-    right: 4px;
+    right: 2px;
   }
   .rail__tick {
-    height: 20px;
-    width: 22px;
-    padding: 0;
-    justify-content: center;
+    height: min(30px, calc((100dvh - 220px) / 12));
+    padding: 0 8px 0 14px;
+    gap: 6px;
+    font-size: 0.62rem;
   }
-  .rail__num,
-  .rail__name {
+  .rail__name,
+  .rail__tick.is-active .rail__name {
     display: none;
   }
   .rail__tick i,
   .rail__tick:hover i {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+    width: 10px;
   }
   .rail__tick.is-active i {
-    width: 5px;
-    height: 14px;
-    border-radius: 3px;
+    width: 20px;
   }
-
+  .rail__num {
+    display: none;
+  }
+  .rail__tick.is-active .rail__num {
+    display: inline;
+  }
   .sound__name {
     display: none;
   }

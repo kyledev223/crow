@@ -65,7 +65,7 @@ const ready: Promise<Engine> = fonts.then(loadAssets).then(async () => {
     },
   })
 
-  const engine = createEngine(canvas, (env) => buildStages({ env, ring, openVideo: lightbox.showVideo, openMeme: lightbox.showMeme }), {
+  const engine = createEngine(canvas, () => buildStages({ ring, openVideo: lightbox.showVideo, openMeme: lightbox.showMeme }), {
     reduced,
     finePointer,
   })
@@ -107,7 +107,7 @@ const ready: Promise<Engine> = fonts.then(loadAssets).then(async () => {
 
   if (import.meta.env.DEV) Object.assign(window, { __engine: engine, __ring: ring, __nav: nav })
 
-  // The loader's static is still up, so this is the moment to pay for the other eleven scenes.
+  // The loader still covers the page, so this is the moment to pay for all twelve scenes.
   await engine.warm()
   return engine
 })
@@ -115,15 +115,15 @@ const ready: Promise<Engine> = fonts.then(loadAssets).then(async () => {
 runBoot({
   reduced,
   ready,
-  onReveal() {
-    views[0].intro?.play(0)
-  },
   onEnter(withSound) {
-    site.inert = false
-    root.classList.remove('is-locked')
-    if (!reduced) gsap.to('[data-after-enter]', { autoAlpha: 1, y: 0, duration: 0.6, stagger: 0.1, ease: 'power3.out' })
-    nav.unlock()
     // Still inside the click, which is what lets browsers (iOS Safari included) start audio.
     music.start(withSound)
+  },
+  onArrive() {
+    site.inert = false
+    root.classList.remove('is-locked')
+    views[0].intro?.play(0)
+    if (!reduced) gsap.to('[data-after-enter]', { autoAlpha: 1, y: 0, duration: 0.6, stagger: 0.1, ease: 'power3.out', delay: 0.5 })
+    nav.unlock()
   },
 })

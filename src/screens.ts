@@ -73,7 +73,14 @@ export const SCREENS: ScreenDef[] = [
       ${eyebrow(4, 'THE POST', 'The Perch, late autumn')}
       ${head('NAMED BY', 'THE FLOCK.')}
       ${text('Nobody ran a naming contest. One bird asked one question on a message board for birds, and the replies had settled it before the sun went down.')}
-      <p class="note" data-scrub>214 caws · 61 echoes · 9 shinies. He still has the screenshot.</p>`,
+      <article class="card card--post" data-scrub aria-label="Post by wire_sitter_09">
+        <header>
+          <span class="card__avatar" aria-hidden="true"></span>
+          <span><b>wire_sitter_09</b><small>The Perch · east wire board</small></span>
+        </header>
+        <p>${mark('what do you call a bird that {{comes back every season for the same coin}}? asking for the flock')}</p>
+        <footer><span>214 caws</span><span>61 echoes</span><span>9 shinies</span></footer>
+      </article>`,
   },
   {
     id: 'interview',
@@ -114,7 +121,7 @@ export const SCREENS: ScreenDef[] = [
   {
     id: 'cheers',
     name: 'Cheers',
-    side: 'right',
+    side: 'left',
     html: `
       ${eyebrow(8, 'CHEERS', 'The Wire, last orders')}
       ${head('TO SMALL', 'SHINY THINGS.')}
@@ -124,7 +131,7 @@ export const SCREENS: ScreenDef[] = [
   {
     id: 'ask',
     name: 'Ask the crow',
-    side: 'left',
+    side: 'right',
     html: `
       ${eyebrow(9, 'ASK THE CROW', 'Inbox: 4,112 unread')}
       ${head('ASK HIM', 'ANYTHING.')}
