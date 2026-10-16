@@ -14,6 +14,8 @@ export interface BootOptions {
   reduced: boolean
   /** Resolves with the engine once every scene is built and warmed up. */
   ready: Promise<Engine>
+  /** How far loading has got, 0–1 (1 once `ready` has resolved). */
+  progress(): number
   /** Runs inside the click, so audio is allowed to start. */
   onEnter(withSound: boolean): void
   /** Screen 01 is up: reveal its copy and hand over the controls. */
@@ -37,7 +39,7 @@ export interface BootOptions {
  *               scans in from the top, the title slides in
  *    Reduced motion: a 0.6s fade instead.
  */
-export function runBoot({ reduced, ready, onEnter, onArrive }: BootOptions) {
+export function runBoot({ reduced, ready, progress, onEnter, onArrive }: BootOptions) {
   const root = document.documentElement
   const boot = document.getElementById('boot')!
   const count = document.getElementById('bootCount')!
@@ -45,21 +47,31 @@ export function runBoot({ reduced, ready, onEnter, onArrive }: BootOptions) {
   const bar = document.getElementById('bootBar')!
   const entry = document.getElementById('entry')!
 
-  const progress = { v: 0 }
+  // The counter follows a 2.4s ease, but never runs ahead of the real load
+  // (the crow's download, then the scenes being built and warmed).
+  const timed = { v: 0 }
+  gsap.to(timed, { v: 100, duration: reduced ? 0.6 : 2.4, ease: 'power2.inOut' })
+  let shown = 0
+  let drawn = -1
   const counted = new Promise<void>((resolve) => {
-    gsap.to(progress, {
-      v: 100,
-      duration: reduced ? 0.6 : 2.4,
-      ease: 'power2.inOut',
-      onUpdate() {
-        const v = Math.round(progress.v)
+    const tick = (_t: number, dt: number) => {
+      const target = Math.min(timed.v, progress() * 100)
+      shown += (target - shown) * Math.min(1, dt / 120)
+      if (target - shown < 0.5) shown = target
+      const v = Math.round(shown)
+      if (v !== drawn) {
+        drawn = v
         count.textContent = String(v).padStart(3, '0')
         gsap.set(bar, { scaleX: v / 100 })
         const line = [...STATUS].reverse().find(([at]) => v >= at)
         if (line && status.textContent !== line[1]) status.textContent = line[1]
-      },
-      onComplete: resolve,
-    })
+      }
+      if (v >= 100) {
+        gsap.ticker.remove(tick)
+        resolve()
+      }
+    }
+    gsap.ticker.add(tick)
   })
 
   let engine: Engine

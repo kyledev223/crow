@@ -69,6 +69,7 @@ export function createEngine(canvas: HTMLCanvasElement, parts: { stages: Stage[]
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false })
   renderer.setClearColor(0x020308, 1)
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace // the final pass encodes sRGB itself
+  crow.useRenderer(renderer)
 
   const camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.05, 400)
   const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 })

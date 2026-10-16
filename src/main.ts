@@ -39,12 +39,19 @@ initSoundControl()
 const canvas = document.getElementById('gl') as HTMLCanvasElement
 const site = document.getElementById('site')!
 let nav: Nav
+/** Loader progress: the crow's download is most of the wait; the last stretch is building and warming the scenes. */
+let crowLoaded = 0
+let siteReady = false
 
 /** Canvas text needs the fonts in memory first; don't let a slow font hold the page forever. */
 const fonts = Promise.race([
   Promise.all(['900 120px "Archivo Variable"', '500 20px "JetBrains Mono"'].map((f) => document.fonts.load(f))),
   new Promise((r) => setTimeout(r, 2500)),
 ])
+
+// The crow is the biggest download; start it straight away rather than after the fonts.
+const crowLoad = loadCrow('/assets/crow/crow.glb', reduced, (f) => (crowLoaded = f))
+crowLoad.catch(() => {}) // reported through `ready`
 
 const ready: Promise<Engine> = fonts.then(async () => {
   const memes = buildMemes()
@@ -62,7 +69,7 @@ const ready: Promise<Engine> = fonts.then(async () => {
   })
 
   const [crow, entry, stages] = await Promise.all([
-    loadCrow('/assets/crow/crow.glb', reduced),
+    crowLoad,
     createEntry(reduced),
     buildStages({ ring, openVideo: lightbox.showVideo, openMeme: lightbox.showMeme }),
   ])
@@ -110,6 +117,7 @@ const ready: Promise<Engine> = fonts.then(async () => {
   return engine
 })
 
+ready.then(() => (siteReady = true)).catch(() => {})
 ready.catch((err) => {
   console.error(err)
   document.getElementById('bootStatus')!.textContent = 'Something broke while loading. Try a refresh.'
@@ -118,6 +126,7 @@ ready.catch((err) => {
 runBoot({
   reduced,
   ready,
+  progress: () => (siteReady ? 1 : crowLoaded * 0.9),
   onEnter(withSound) {
     // Still inside the click, which is what lets browsers (iOS Safari included) start audio.
     music.start(withSound)

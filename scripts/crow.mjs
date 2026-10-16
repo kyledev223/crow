@@ -8,16 +8,19 @@
  *     "Sitting Idle.fbx" are renamed to the site's slugs, see RENAMES)
  *   - crow-apose.png, the front image the model was generated from
  *
- * Steps: rename → Blender (scripts/crow/build.py: unwrap, project + bake the
- * texture, merge every clip onto one rig, export) → glTF-Transform (prune,
- * resample, quantize, meshopt) → public/assets/crow/crow.glb.
- * Previews of the bake (turntable, projection fit) go to assets-raw/crow/preview/.
+ * Steps: rename → Blender (scripts/crow/build.py: unwrap with xatlas, project
+ * + bake the colour and AO/roughness textures, merge every clip onto one rig,
+ * export) → glTF-Transform (attach the AO/roughness map, WebP textures,
+ * prune, resample, quantize, meshopt) → public/assets/crow/crow.glb.
+ * Previews of the bake (turntable, projection fit, regions) go to
+ * assets-raw/crow/preview/, along with the cached UV atlas.
  *
  * Needs Blender 4.2+. It is found via $BLENDER, then PATH, then the usual
- * install folders.
+ * install folders. xatlas is pip-installed for Blender's Python into
+ * .venv-assets/blender-py/ on first run.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, rmSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { dirname, join, resolve, basename, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -88,8 +91,9 @@ function findBlender() {
 const blender = findBlender()
 log('blender:', blender)
 mkdirSync(PREVIEW, { recursive: true })
-const tmp = join(tmpdir(), `crow-${process.pid}.glb`)
-execFileSync(blender, ['-b', '--factory-startup', '-noaudio', '--python', join(root, 'scripts/crow/build.py'), '--', SRC, tmp, PREVIEW], {
+const work = mkdtempSync(join(tmpdir(), 'crow-'))
+const tmp = join(work, 'crow.glb')
+execFileSync(blender, ['-b', '--factory-startup', '-noaudio', '--python', join(root, 'scripts/crow/build.py'), '--', SRC, tmp, PREVIEW, work], {
   stdio: ['ignore', 'inherit', 'inherit'],
 })
 if (!existsSync(tmp)) throw new Error('Blender did not write the .glb')
@@ -97,19 +101,39 @@ if (!existsSync(tmp)) throw new Error('Blender did not write the .glb')
 // ---- 3. compress -------------------------------------------------------------
 const { NodeIO } = await import('@gltf-transform/core')
 const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions')
-const { prune, dedup, resample, quantize, meshopt, weld } = await import('@gltf-transform/functions')
+const { prune, dedup, resample, quantize, meshopt, weld, textureCompress } = await import('@gltf-transform/functions')
 const { MeshoptEncoder, MeshoptDecoder } = await import('meshoptimizer')
+const sharp = (await import('sharp')).default
 await MeshoptEncoder.ready
 await MeshoptDecoder.ready
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder })
 const doc = await io.read(tmp)
-await doc.transform(dedup(), prune(), resample({ tolerance: 1e-4 }), weld(), quantize(), meshopt({ encoder: MeshoptEncoder, level: 'high' }))
+
+// AO (R) and roughness (G), baked alongside the colour; glTF reads both from one texture.
+const material = doc.getRoot().listMaterials()[0]
+const orm = doc.createTexture('crow-orm').setImage(readFileSync(join(work, 'crow-orm.png'))).setMimeType('image/png').setURI('crow-orm.png')
+material.setMetallicRoughnessTexture(orm).setRoughnessFactor(1).setMetallicFactor(0).setOcclusionTexture(orm).setOcclusionStrength(1)
+
+await doc.transform(
+  dedup(),
+  prune(),
+  resample({ tolerance: 1e-4 }),
+  weld(),
+  // Full detail: no decimation. Texture coordinates get 14 bits for the dense atlas, normals 10 for smooth shading.
+  quantize({ quantizePosition: 14, quantizeNormal: 10, quantizeTexcoord: 14, quantizeWeight: 8 }),
+  textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^baseColor/, quality: 90, effort: 100 }),
+  textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^(metallicRoughness|occlusion)/, quality: 86, effort: 100 }),
+  meshopt({ encoder: MeshoptEncoder, level: 'high' }),
+)
 mkdirSync(dirname(OUT), { recursive: true })
 await io.write(OUT, doc)
-rmSync(tmp, { force: true })
+rmSync(work, { recursive: true, force: true })
 
-const anims = doc.getRoot().listAnimations().map((a) => a.getName())
-log(`wrote ${OUT} (${(statSync(OUT).size / 1024).toFixed(0)} KB)`)
+const root_ = doc.getRoot()
+const anims = root_.listAnimations().map((a) => a.getName())
+const texKB = root_.listTextures().map((t) => `${t.getName() || t.getURI()} ${(t.getImage().byteLength / 1024).toFixed(0)} KB`)
+log(`wrote ${OUT} (${(statSync(OUT).size / 1024 / 1024).toFixed(2)} MB)`)
+log('textures:', texKB.join(', '))
 log('clips:', anims.join(', '))
 log('previews:', PREVIEW)

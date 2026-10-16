@@ -4,7 +4,7 @@
  *
  * The picture is rendered crisp at the device pixel ratio (capped), with no
  * pixelation. Environments are glowing point clouds (gl/points.ts); the crow
- * is a textured hologram (gl/crow.ts). One full-screen pass (gl/post.ts) adds
+ * is PBR-shaded with a hologram on top (gl/crow.ts). One full-screen pass (gl/post.ts) adds
  * bloom, film grain, a faint diagonal scan texture, colour fringing toward
  * the edges and a vignette.
  */
@@ -54,22 +54,38 @@ export const fx = {
   /** Slow handheld "breathing" of the camera. */
   breathing: { amount: 0.03, speed: 0.18 },
 
-  /** The crow hologram. */
+  /** The crow: PBR shading, with the hologram on top. */
   holo: {
-    /** Multiplier on his texture so the colours read on black. */
-    brightness: 2.1,
-    /** Blue rim glow strength. */
-    rim: 1.1,
+    /** Key light (from the camera's upper left), fill (right), cool back light (outline). */
+    key: 1.6,
+    fill: 0.45,
+    back: 0.6,
+    /** Reflections of a soft room: shoes, beak, tie. */
+    env: 0.3,
+    /** How much the baked ambient occlusion also darkens direct light, 0–1. */
+    aoDirect: 0.55,
+    /** Brightest his lit surface gets (linear). Below the bloom threshold, so his face and shirt never glow. */
+    ceiling: 0.58,
+    /** Blue sheen on the dark feathers toward their edges. */
+    sheen: 0.18,
+    /** Blue rim glow strength, and how tight it hugs the silhouette (higher = tighter). */
+    rim: 0.26,
+    rimPower: 5,
     /** Horizontal scan bands per metre of height. */
     bands: 46,
     /** Band darkness, 0–1. */
-    bandDepth: 0.38,
+    bandDepth: 0.14,
     /** Upward band speed, metres per second. */
     bandSpeed: 0.05,
+    /** The slow bright band that sweeps up him every few seconds. */
+    sweep: 0.1,
     /** Seconds between flickers (randomised ±50%). */
     flickerEvery: 4,
-    /** Height above the floor (metres) over which his legs fade into the glow. */
+    /** Depth of a flicker, 0–1. */
+    flicker: 0.3,
+    /** Height above the floor (metres) over which his legs fade into the glow, and how far they fade, 0–1. */
     floorFade: 0.42,
+    floorGlow: 0.6,
   },
 
   /** Particle budget. Lite mode halves every count. */

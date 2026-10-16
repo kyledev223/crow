@@ -2,7 +2,7 @@
 
 A twelve-screen, full-viewport site for a **fictional** community art project. No real token, contract, company or people are involved. Every quote is from a made-up bird.
 
-Every environment is built from glowing points: outlines of rooms, floors, props, charts, text and the emblem, mostly white and blue with gold accents, under soft bloom, fine film grain and a little colour fringing toward the edges. The crow is a real rigged 3D model drawn as a hologram, with a different animation on each screen. The site opens on a star field around the emblem. Built with Vite, vanilla TypeScript, Three.js and GSAP. The music is generated in the browser and the fonts are bundled.
+Every environment is built from glowing points: outlines of rooms, floors, props, charts, text and the emblem, mostly white and blue with gold accents, under soft bloom, fine film grain and a little colour fringing toward the edges. The crow is a real rigged 3D model, PBR-shaded with a light hologram treatment on top, with a different animation on each screen. The site opens on a star field around the emblem. Built with Vite, vanilla TypeScript, Three.js and GSAP. The music is generated in the browser and the fonts are bundled.
 
 ## Run it
 
@@ -28,16 +28,19 @@ Source files live in `assets-raw/crow/`:
 | `crow-apose.png` | the front image the model was generated from; it becomes his texture |
 | `idle.fbx`, `sitting-idle.fbx`, `cheering.fbx`, `walking.fbx`, `reaching.fbx`, `looking-up.fbx`, `toast.fbx`, `typing.fbx`, `looking-at-hand.fbx`, `waving.fbx` | Mixamo exports on the same rig, one clip each |
 
-Drop new files in and run `npm run crow`. It writes `public/assets/crow/crow.glb` (about 1.3 MB) and previews in `assets-raw/crow/preview/`. Step by step:
+Drop new files in and run `npm run crow`. It writes `public/assets/crow/crow.glb` (about 4.6 MB: the full 441k-triangle mesh, two 2048px textures, ten clips) and previews in `assets-raw/crow/preview/`. Step by step:
 
 1. **Renames** Mixamo's names to the slugs above ("Breathing Idle.fbx" → `idle.fbx`, "Drinking.fbx" → `toast.fbx`, and so on; the table is `RENAMES` in `scripts/crow.mjs`).
 2. **Blender** (`scripts/crow/build.py`, run headless):
-   - takes the skinned mesh and rig from one clip file, drops the FBX's split normals (which would split every vertex) and unwraps it;
-   - **projects `crow-apose.png` onto the bind pose from the front**, orthographically. The projection is fitted to the model's silhouette first (scale and offset, by overlap; the fit is saved as `preview/projection-fit.png`), and the figure's colours are bled outward so the grey backdrop never leaks in;
-   - bakes a visibility map from the front (a sun light with hard shadows), and wherever the front can't see (back, sides, under the beak) blends smoothly to **region colours** picked by bone weights and height: blue-black feathers with a blue sheen on the head and hands, charcoal suit, white shirt, `#2F7BFF` tie, black shoes;
+   - takes the skinned mesh and rig from one clip file, scales him to 1.9 m, triangulates and drops the FBX's split normals (which would split every vertex);
+   - **unwraps it with xatlas** (`scripts/crow/unwrap.py`, run in Blender's own Python outside Blender; ~2.6k charts, ~80% of the texture used). The atlas takes about six minutes and is cached in `preview/uv-*.npz`, so later runs take about a minute and a half. xatlas is pip-installed into `.venv-assets/blender-py/` on first use;
+   - **projects `crow-apose.png` onto the bind pose from the front**, orthographically. The projection is fitted to the model's silhouette (scale and offset, by overlap), then a smooth warp lines up the limbs' edges row by row and column by column; the fit is saved as `preview/projection-fit.png` (photo, figure edge green, model edge red). The figure's colours are bled outward so the grey backdrop never leaks in;
+   - gives every vertex a **region** (feathers, beak, hands, suit, shirt, tie, shoes) from bone weights plus the colour the front sees; unseen vertices take the nearest seen region across the surface, within limits (the beak by its shape, shoes below the shoe line, no shirt down his back). `preview/regions-*.png` shows them;
+   - fills what the front can't see (back, sides, under the arms) with **region colours** (half the named colour, half the photo's: blue-black feathers, charcoal suit, white shirt, `#2F7BFF` tie, black shoes), carrying the photo's local shade across the seam and fading it out over ~6 cm, and adds **procedural detail in 3D**: fabric grain and twill on the suit, feather streaks flowing back from the beak with a blue sheen, a fine grain on the hands;
+   - bakes **ambient occlusion and roughness** into a second texture for PBR (glossy shoes and beak, silky tie, matte suit);
    - pulls every clip onto the one rig as a named animation, and exports a single `.glb`: the mesh once, plus all ten clips;
-   - renders `preview/turntable-{front,three-quarter,side,back}.png`.
-3. **glTF-Transform** prunes, resamples, quantises and meshopt-compresses it, and the texture is WebP.
+   - renders `preview/turntable-{front,three-quarter,side,back}.png` (flat-lit: the texture as it is).
+3. **glTF-Transform** attaches the AO/roughness texture, converts both textures to WebP, prunes, resamples, quantises (no decimation) and meshopt-compresses it.
 
 Blender is found via `$BLENDER`, then `PATH`, then the usual install folders (and `~/tools/blender-*`). The portable zip from <https://www.blender.org/download/> works; no install needed.
 
@@ -58,7 +61,7 @@ src/
     engine.ts           renderer, composer (scene → bloom → final), cameras, transitions, lite mode
     points.ts           the point-cloud material and builder every environment uses
     shapes.ts           lines, rings, panels, boxes, discs, and text/SVG sampled into points
-    crow.ts             loads crow.glb, the hologram shader, clips, crossfades, flicker
+    crow.ts             loads crow.glb, PBR material + hologram patch, lights, clips, crossfades, flicker
     entry.ts            star field, the emblem in points, vortex, shockwave, hyperspace streaks
     post.ts             the final pass: tone map, grain, scan texture, fringing, vignette, flash, glitch, lens
     scenes.ts           the twelve stages, in page order
@@ -74,7 +77,7 @@ src/
   crow-art.ts           the old SVG mascot, still used for the share image
   style.css             tokens on :root, then one block per piece of UI
 scripts/
-  crow.mjs, crow/build.py   the `npm run crow` pipeline
+  crow.mjs, crow/build.py, crow/unwrap.py   the `npm run crow` pipeline
   dev-phone.mjs         the `dev:phone` server and QR code
   og.mjs                share image and icons
 assets-raw/             source files (never shipped)
@@ -99,7 +102,7 @@ public/assets/crow/     crow.glb, written by npm run crow
 | 11 | `#memes` | The memes | idle | the meme ring around him, gold dust on the floor |
 | 12 | `#flock` | Join the flock | waving | the emblem behind him, gold light lines |
 
-The crow is a hologram everywhere: his baked colours, fine bands drifting upward, a blue rim, legs fading into the floor glow, a flicker every few seconds; he scans in from the top on arrival and dissolves on the way out.
+The crow is PBR-shaded everywhere: his baked colours, AO and roughness under a key and fill light that follow the camera, a cool back light and soft room reflections, kept below the bloom threshold so his face and shirt never glow. The hologram sits on top, lightly: faint bands drifting upward, a thin blue rim, legs fading into the floor glow, a flicker every few seconds; he scans in from the top on arrival and dissolves on the way out.
 
 Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}` to highlight it in blue. The "posts" are generic cards on a made-up network called the Perch.
 
@@ -121,7 +124,7 @@ Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}
 | `post.*` | Film grain, diagonal scan texture, edge fringing (px), vignette, exposure |
 | `lens.*` | The invisible cursor magnifier |
 | `parallax.*`, `breathing.*` | How the camera follows the cursor, and its slow drift |
-| `holo.*` | The crow hologram: brightness, rim, band count/depth/speed, flicker rate, how high his legs fade |
+| `holo.*` | The crow: key/fill/back light, reflections, AO, brightness ceiling (under bloom), feather sheen; then the hologram: rim, band count/depth/speed, sweep, flicker rate and depth, how high and how far his legs fade |
 | `particles.density` | Global multiplier on every point count |
 | `entry.*` | Star field and emblem point counts, cursor push, streaks |
 | `transition.*` | Out / in / intro timings |
@@ -190,7 +193,7 @@ The phone loads the site over plain `http`, which is fine for everything here. C
 
 ## Deploy
 
-The site is plain static files. `npm run build` puts everything in `dist/` (about 3 MB, the crow included).
+The site is plain static files. `npm run build` puts everything in `dist/` (about 6 MB, the crow included).
 
 ### Netlify, drag and drop (no Git needed)
 
