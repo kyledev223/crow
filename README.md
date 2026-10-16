@@ -67,9 +67,9 @@ src/
     scenes.ts           the twelve stages, in page order
     ring.ts             the 3D meme ring (drag, inertia, snap)
   cursor.ts             ring + dot cursor (shows DRAG over the meme ring)
-  lightbox.ts           meme viewer and the keynote video slot
-  config.ts             contract address, links, stats, keynote video
-  token.ts              turns config into disabled placeholders or live controls
+  lightbox.ts           meme viewer
+  config.ts             contract address, links, stats
+  token.ts              turns config into live controls (and leaves out any without a value)
   audio.ts              generated music, the enter riser and bass hit, the music pill
   lite.ts               decides when lite mode is on
   debug.ts              the ?debug overlay
@@ -91,7 +91,7 @@ public/assets/crow/     crow.glb, written by npm run crow
 |---|---|---|---|---|
 | 01 | `#crow` | The crow | sitting-idle, on a stool in a floor ring | a hall: rounded wall panels, tall bars, a curved desk, floor lines |
 | 02 | `#name` | Why the name | — | "COUPON CROWS" in giant 3D points, slowly turning; a coin rising at the bottom edge |
-| 03 | `#stage` | On stage | clapping | spotlight cone, mic stand, gold-dust audience, a dot-matrix screen (click it for the video lightbox) |
+| 03 | `#stage` | On stage | clapping | spotlight cone, mic stand, gold-dust audience, a dot-matrix screen |
 | 04 | `#post` | The post | walking, side view | candlestick chart and a line across the back; the floor scrolls under him |
 | 05 | `#record` | On the record | idle, behind a glowing ledger rail | drifting strips of "$CAW" and "COUPON CROWS" |
 | 06 | `#foryou` | For you | reaching, close up | a tunnel of rings, a halo behind his head |
@@ -143,7 +143,7 @@ About 3.8s; click or Esc skips to the end.
 
 Reduced motion gets a 0.6s fade instead. "Enter without sound" is the same picture, silent.
 
-## Going live: contract address, buy buttons, keynote video
+## Going live: contract address, buy buttons, links
 
 Everything is driven by `src/config.ts`:
 
@@ -151,12 +151,11 @@ Everything is driven by `src/config.ts`:
 contractAddress: null,   // e.g. '0xAbC…123'
 buyUrl: null,            // e.g. 'https://…'
 explorerUrl: null,       // e.g. 'https://…/token/0xAbC…123'
-stageVideoUrl: null,     // e.g. '/keynote.mp4' (file in public/)
 communityUrl: '#',       // "Join the community" / "Drop a meme"
 followUrl: '#',          // "Follow the flock"
 ```
 
-While a value is `null` (or `'#'` for the links), its controls are greyed out, marked `aria-disabled`, say "Coming soon" on hover, and do nothing. Fill a value in and they wake up: the CA pills copy to the clipboard, the buy/explorer/community buttons become real links, and the keynote lightbox plays the video. The controls are in the bottom-right corner, on screen 10 and on screen 12.
+While a value is `null` (or `'#'` for the links), the controls that need it aren't shown at all. Fill a value in and they appear: the CA pills copy to the clipboard and the buy/explorer/community buttons become real links. They live in the bottom-right corner, on screen 10, 11 (the meme link) and 12. The token stats on screen 12 are the `stats` list.
 
 ## Test on a phone
 

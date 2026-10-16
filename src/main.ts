@@ -71,7 +71,7 @@ const ready: Promise<Engine> = fonts.then(async () => {
   const [crow, entry, stages] = await Promise.all([
     crowLoad,
     createEntry(reduced),
-    buildStages({ ring, openVideo: lightbox.showVideo, openMeme: lightbox.showMeme }),
+    buildStages({ ring, openMeme: lightbox.showMeme }),
   ])
   const engine = createEngine(canvas, { stages, entry, crow }, { reduced, finePointer })
   engine.start()
@@ -83,7 +83,6 @@ const ready: Promise<Engine> = fonts.then(async () => {
 
   // ---- clicks into the 3D scene (bare canvas only) ---------------------------
   canvas.addEventListener('click', (e) => !nav.locked && engine.pick(e.clientX, e.clientY)?.onClick())
-  document.querySelectorAll('[data-open-video]').forEach((b) => b.addEventListener('click', lightbox.showVideo))
 
   // ---- the meme ring: drag on the canvas, keys on its focusable label ---------
   const MEMES = views.findIndex((v) => v.def.id === 'memes')

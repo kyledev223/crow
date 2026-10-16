@@ -1,24 +1,22 @@
 /**
- * Single source of truth for everything that is a placeholder today.
+ * Contract address, links and token stats in one place.
  *
- * While `contractAddress`, `buyUrl` and `explorerUrl` are `null`, every
- * control that depends on them renders greyed out with a "Coming soon" tag
- * and does nothing on click. Fill a value in and the matching controls turn
- * active on their own: the address becomes copy-to-clipboard, the buttons
+ * Controls that need a value only appear once it is set: while
+ * `contractAddress`, `buyUrl` or `explorerUrl` is `null` (or a link is `'#'`),
+ * the controls that depend on it aren't shown at all. Fill a value in and they
+ * appear on their own: the address becomes copy-to-clipboard, the buttons
  * become real links.
  */
 export interface SiteConfig {
   name: string
   ticker: string
-  /** Full contract address, e.g. "0xAbc…". `null` = disabled placeholder. */
+  /** Full contract address, e.g. "0xAbc…". `null` = not shown. */
   contractAddress: string | null
-  /** Where "Buy $CAW" goes. `null` = disabled placeholder. */
+  /** Where "Buy $CAW" goes. `null` = not shown. */
   buyUrl: string | null
-  /** Where "Explorer" goes. `null` = disabled placeholder. */
+  /** Where "Explorer" goes. `null` = not shown. */
   explorerUrl: string | null
-  /** Video for the keynote lightbox (screen 3). `null` = placeholder slot. */
-  stageVideoUrl: string | null
-  /** "Join the flock" links. "#" is an inert placeholder. */
+  /** Community and follow links. `'#'` = not shown. */
   communityUrl: string
   followUrl: string
   stats: { label: string; value: string }[]
@@ -30,16 +28,10 @@ export const config: SiteConfig = {
   contractAddress: null,
   buyUrl: null,
   explorerUrl: null,
-  stageVideoUrl: null,
   communityUrl: '#',
   followUrl: '#',
   stats: [
     { label: 'Token', value: 'Coupon Crows · $CAW' },
     { label: 'Supply', value: '1,000,000,000' },
-    { label: 'Chain', value: 'TBA' },
-    { label: 'Rewards', value: 'TBA' },
   ],
 }
-
-/** Shown in place of the address while `contractAddress` is null. */
-export const PLACEHOLDER_ADDRESS = '0x0000…0000'

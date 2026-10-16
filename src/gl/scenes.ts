@@ -34,7 +34,6 @@ import {
  */
 export interface SceneDeps {
   ring: Ring
-  openVideo(): void
   openMeme(index: number): void
 }
 
@@ -294,7 +293,7 @@ function theName(emblem: Stamp): Stage {
 // ---------------------------------------------------------------------------
 // 03 ON STAGE: spotlight, mic, gold audience, dot-matrix screen
 // ---------------------------------------------------------------------------
-function onStage(emblem: Stamp, { openVideo }: SceneDeps): Stage {
+function onStage(emblem: Stamp): Stage {
   const scene = baseScene()
   beam(scene, V(0, 7.5, 0.2), V(0, 0, 0.2), 0.25, 1.7, new THREE.Color('#9fbfff'), 0.9)
   floorGlow(scene, V(0, 0, 0.1), 1.1, 0.9, C.pale)
@@ -357,16 +356,12 @@ function onStage(emblem: Stamp, { openVideo }: SceneDeps): Stage {
     }
     roundedRect(c, V(0, 0, 0), SW + 0.3, SH + 0.3, 0.12, { density: 70, jitter: 0.01, glow: 0.8 })
   }, { twinkle: 0.25, scatter: 6 })
-  const hit = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), new THREE.MeshBasicMaterial({ visible: false }))
-  screen.add(hit)
   motes(scene, 305, V(-6, 0, -5), V(6, 6, 2), 1200)
-  const clickables: Clickable[] = [{ object: hit, onClick: openVideo }]
   return {
     id: 'stage',
     scene,
     camera: { pos: V(0.95, 1.5, 5.6), target: V(0.95, 1.15, 0), fov: 40 },
     crow: { pos: V(0, 0, 0), rotY: 0.08, clip: 'clapping' },
-    clickables,
   }
 }
 
@@ -808,7 +803,7 @@ export async function buildStages(deps: SceneDeps): Promise<Stage[]> {
   return [
     hall(),
     theName(emblem),
-    onStage(emblem, deps),
+    onStage(emblem),
     thePost(),
     onRecord(),
     forYou(),

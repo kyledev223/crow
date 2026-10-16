@@ -93,11 +93,7 @@ export const SCREENS: ScreenDef[] = [
       ${eyebrow('MENTION · ON STAGE · ROOST LIVE, 4 APRIL')}
       ${head('ANY COUPON', 'CROWS?')}
       ${quote('“Show of wings: any coupon crows in tonight? There they are. … From next month, {{every payout lands on the day it’s due}}.”', 'CORVUS BLACK, ON STAGE')}
-      ${note('WARMING UP THE ROOM, THE HOST: “IF YOU DON’T KNOW WHAT A COUPON CROW IS, YOU WILL BY THE END.”')}
-      <div class="actions" data-in>
-        <button class="btn btn--ghost" type="button" data-open-video><span aria-hidden="true">▶</span> Watch Corvus say it</button>
-      </div>
-      ${note('— OR CLICK THE SCREEN BEHIND HIM')}`,
+      ${note('WARMING UP THE ROOM, THE HOST: “IF YOU DON’T KNOW WHAT A COUPON CROW IS, YOU WILL BY THE END.”')}`,
   },
   {
     id: 'post',
@@ -192,7 +188,7 @@ export const SCREENS: ScreenDef[] = [
     html: `
       ${eyebrow('THE TOKEN · CONCEPT')}
       ${head('HOLD $CAW.', 'COLLECT SHINY', 'THINGS.')}
-      ${lede('$CAW is a community token concept: a mascot, a running joke about patience, and a flock that likes things that glitter. There is no contract yet and nothing to buy. When there is, these buttons wake up.')}
+      ${lede('$CAW is a community token concept: a mascot, a running joke about patience, and a flock that likes things that glitter. There is no contract yet and nothing to buy.')}
       <div class="actions" data-in>
         <span class="slot" data-buy="gold"></span>
         <span class="slot" data-ca="named"></span>
@@ -231,14 +227,13 @@ export const SCREENS: ScreenDef[] = [
       </div>
       <div class="cabox" data-in>
         <span class="cabox__label">Contract address</span>
-        <span class="slot" data-ca="full" data-tag></span>
+        <span class="slot" data-ca="full"></span>
       </div>
       <div class="actions" data-in>
         <span class="slot" data-buy="ghost"></span>
         <span class="slot" data-explorer></span>
       </div>
-      <dl class="stats" id="stats" data-in></dl>
-      <p class="disclaimer" data-in>A fictional community art project. Coupon Crows, Corvus Black, the Hedgerow, the Perch and every bird quoted here are made up. Not affiliated with any company or person. Nothing here is financial advice.</p>`,
+      <dl class="stats" id="stats" data-in></dl>`,
   },
 ]
 
