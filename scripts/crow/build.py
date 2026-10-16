@@ -46,7 +46,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 PYDEPS = os.path.join(ROOT, ".venv-assets", "blender-py")
 
 # Slug -> clip file (already renamed by crow.mjs). The first one found also provides the mesh.
-CLIPS = ["idle", "sitting-idle", "cheering", "walking", "reaching", "looking-up", "toast", "typing", "looking-at-hand", "waving"]
+CLIPS = ["idle", "sitting-idle", "clapping", "walking", "reaching", "looking-up", "toast", "typing", "looking-at-hand", "waving"]
 
 # Regions. Colours are sRGB; the fallback is half the named colour, half what the photo shows for that region.
 LABELS = ["feather", "beak", "hand", "suit", "shirt", "tie", "shoe"]

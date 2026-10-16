@@ -100,8 +100,10 @@ export const fx = {
   entry: {
     /** Points in the star field. */
     field: 82000,
-    /** Points in the symbol. */
+    /** Points in the crow's head inside the orb. */
     symbol: 11000,
+    /** Points in the orb's shell (its band gets about half as many). */
+    orb: 16000,
     /** How hard the cursor pushes nearby stars. */
     push: 0.07,
     /** Hyperspace streaks. */

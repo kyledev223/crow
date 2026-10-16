@@ -2,7 +2,7 @@
 
 A twelve-screen, full-viewport site for a **fictional** community art project. No real token, contract, company or people are involved. Every quote is from a made-up bird.
 
-Every environment is built from glowing points: outlines of rooms, floors, props, charts, text and the emblem, mostly white and blue with gold accents, under soft bloom, fine film grain and a little colour fringing toward the edges. The crow is a real rigged 3D model, PBR-shaded with a light hologram treatment on top, with a different animation on each screen. The site opens on a star field around the emblem. Built with Vite, vanilla TypeScript, Three.js and GSAP. The music is generated in the browser and the fonts are bundled.
+Every environment is built from glowing points: outlines of rooms, floors, props, charts, text and the emblem, mostly white and blue with gold accents, under soft bloom, fine film grain and a little colour fringing toward the edges. The crow is a real rigged 3D model, PBR-shaded with a light hologram treatment on top, with a different animation on each screen. The site opens on a star field around a glass orb of points with the crow's head inside. Built with Vite, vanilla TypeScript, Three.js and GSAP. The music is generated in the browser and the fonts are bundled.
 
 ## Run it
 
@@ -26,7 +26,7 @@ Source files live in `assets-raw/crow/`:
 |---|---|
 | `Meshy_AI_…fbx` | the model as generated (kept for reference; the rigged copy inside the Mixamo files is what's used) |
 | `crow-apose.png` | the front image the model was generated from; it becomes his texture |
-| `idle.fbx`, `sitting-idle.fbx`, `cheering.fbx`, `walking.fbx`, `reaching.fbx`, `looking-up.fbx`, `toast.fbx`, `typing.fbx`, `looking-at-hand.fbx`, `waving.fbx` | Mixamo exports on the same rig, one clip each |
+| `idle.fbx`, `sitting-idle.fbx`, `clapping.fbx`, `walking.fbx`, `reaching.fbx`, `looking-up.fbx`, `toast.fbx`, `typing.fbx`, `looking-at-hand.fbx`, `waving.fbx` | Mixamo exports on the same rig, one clip each |
 
 Drop new files in and run `npm run crow`. It writes `public/assets/crow/crow.glb` (about 4.6 MB: the full 441k-triangle mesh, two 2048px textures, ten clips) and previews in `assets-raw/crow/preview/`. Step by step:
 
@@ -62,7 +62,7 @@ src/
     points.ts           the point-cloud material and builder every environment uses
     shapes.ts           lines, rings, panels, boxes, discs, and text/SVG sampled into points
     crow.ts             loads crow.glb, PBR material + hologram patch, lights, clips, crossfades, flicker
-    entry.ts            star field, the emblem in points, vortex, shockwave, hyperspace streaks
+    entry.ts            star field, the orb (shell, notched band, crow head) in points, vortex, shockwave, hyperspace streaks
     post.ts             the final pass: tone map, grain, scan texture, fringing, vignette, flash, glitch, lens
     scenes.ts           the twelve stages, in page order
     ring.ts             the 3D meme ring (drag, inertia, snap)
@@ -91,7 +91,7 @@ public/assets/crow/     crow.glb, written by npm run crow
 |---|---|---|---|---|
 | 01 | `#crow` | The crow | sitting-idle, on a stool in a floor ring | a hall: rounded wall panels, tall bars, a curved desk, floor lines |
 | 02 | `#name` | Why the name | — | "COUPON CROWS" in giant 3D points, slowly turning; a coin rising at the bottom edge |
-| 03 | `#stage` | On stage | cheering | spotlight cone, mic stand, gold-dust audience, a dot-matrix screen (click it for the video lightbox) |
+| 03 | `#stage` | On stage | clapping | spotlight cone, mic stand, gold-dust audience, a dot-matrix screen (click it for the video lightbox) |
 | 04 | `#post` | The post | walking, side view | candlestick chart and a line across the back; the floor scrolls under him |
 | 05 | `#record` | On the record | idle, behind a glowing ledger rail | drifting strips of "$CAW" and "COUPON CROWS" |
 | 06 | `#foryou` | For you | reaching, close up | a tunnel of rings, a halo behind his head |
@@ -126,7 +126,7 @@ Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}
 | `parallax.*`, `breathing.*` | How the camera follows the cursor, and its slow drift |
 | `holo.*` | The crow: key/fill/back light, reflections, AO, brightness ceiling (under bloom), feather sheen; then the hologram: rim, band count/depth/speed, sweep, flicker rate and depth, how high and how far his legs fade |
 | `particles.density` | Global multiplier on every point count |
-| `entry.*` | Star field and emblem point counts, cursor push, streaks |
+| `entry.*` | Star field, orb and crow-head point counts, cursor push, streaks |
 | `transition.*` | Out / in / intro timings |
 
 **Budget.** About 295,000 points are built in total (entry plus twelve screens); only the active screen's are drawn, at most ~35,000. `?debug` shows the total.
@@ -136,7 +136,7 @@ Copy for all of them is in `src/screens.ts`; wrap a phrase in `{{double braces}}
 About 3.8s; click or Esc skips to the end.
 
 1. 0–0.4s: the buttons drop away; with sound on, a low riser starts.
-2. 0.4–1.2s: the star field spirals into the emblem, which spins up and brightens while a ring of points forms around it.
+2. 0.4–1.2s: the star field spirals into the orb, which spins up and brightens while a ring of points forms around it.
 3. 1.2–1.6s: it implodes to a point, a beat of darkness, then a shockwave ring, a blue-white flash and a colour burst (with a bass hit).
 4. 1.6–3.0s: hyperspace streaks, accelerating.
 5. 3.0–3.8s: the streaks slow and settle into screen 01's hall; the crow scans in from the top and the title slides in.
@@ -234,7 +234,7 @@ Social crawlers need an absolute image URL, which is built from `VITE_SITE_URL`.
 
 ## Behaviour notes
 
-- **Loader and entry.** A big 000 → 100 counter while every scene is built and drawn once behind it (so nothing stutters later). Then the star field: near stars move more as the cursor leans the camera, and stars near the cursor drift out of its way; the emblem's rim brightens on the side facing the cursor. Audio starts inside the Enter click, as browsers require.
+- **Loader and entry.** A big 000 → 100 counter that follows the crow's download, while every scene is built and drawn once behind it (so nothing stutters later). Then the star field: near stars move more as the cursor leans the camera, and stars near the cursor drift out of its way; the orb's key light leans toward the cursor. Audio starts inside the Enter click, as browsers require.
 - **Mouse.** An invisible lens around the cursor magnifies the picture slightly. The cursor is a thin ring with a dot: the dot is on the pointer, the ring follows with easing, grows over anything clickable, dims over disabled controls, and says DRAG over the meme ring.
 - **Touch.** No lens. The camera drifts slowly, or follows device tilt where the browser allows it without asking (not iOS). Portrait screens frame the crow in the top half and the copy in the bottom.
 - **Music.** Tracks are loudness-matched, crossfade on change, fade on mute, and pause while the tab is hidden. On iPhones the page declares itself as media playback so the music plays with the ringer switch on silent.

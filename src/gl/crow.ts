@@ -26,7 +26,7 @@ import { shared } from './points'
 export type ClipName =
   | 'idle'
   | 'sitting-idle'
-  | 'cheering'
+  | 'clapping'
   | 'walking'
   | 'reaching'
   | 'looking-up'

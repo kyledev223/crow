@@ -9,9 +9,11 @@ import { C, stamp, svgStamp } from './shapes'
  * The entry screen and the enter sequence.
  *
  * At rest: a deep star field orbiting the emblem, inner stars faster (the
- * cursor pushes nearby stars aside). The emblem, built from thousands of
- * points, holds perfectly still at an angle, with a shimmer; its rim
- * brightens on the side facing the cursor.
+ * cursor pushes nearby stars aside). The emblem is a glass orb of points:
+ * a lit sphere shell (bright limb, a highlight, a dimmer far side showing
+ * through), the emblem's notched coin ring as a band wrapped round it, a
+ * faint orbit ring, and the crow's head inside as a solid point sculpture,
+ * held still at a three-quarter angle. Its key light leans toward the cursor.
  *
  * Everything the enter sequence animates lives in `state` (boot.ts drives it):
  *   vortex   the field spirals into the emblem
@@ -128,6 +130,51 @@ void main() {
   vAlpha = min(1.0, px / 1.3) * f * (1.0 - smoothstep(0.85, 1.0, uImplode));
 }`
 
+// The orb's points, lit like a surface: each point's normal is radial from the
+// orb's centre (shell, band) or, for the head, its face or its outline.
+const ORB_VERT = /* glsl */ `
+uniform float uTime;
+uniform float uProj;
+uniform float uSizeK;
+uniform float uGlow;
+uniform float uImplode;
+uniform vec3 uLight;      // key light direction, view space
+uniform float uHead;      // 1 = head sculpture normals
+uniform vec3 uHeadMid;    // head centre (its own space)
+uniform float uHeadHalf;  // half its depth
+uniform vec4 uLook;       // ambient, diffuse, highlight, rim
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aSeed;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  vec3 p = position * (1.0 - uImplode);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+
+  vec3 nObj = normalize(position + 1e-5);
+  if (uHead > 0.5) {
+    vec3 q = position - uHeadMid;
+    nObj = abs(q.z) > uHeadHalf * 0.8 ? vec3(0.0, 0.0, sign(q.z)) : normalize(vec3(q.xy, 0.0) + 1e-5);
+  }
+  vec3 n = normalize(normalMatrix * nObj);
+  vec3 v = normalize(-mv.xyz);
+  float ndv = dot(n, v);
+  float facing = mix(0.3, 1.0, smoothstep(-0.3, 0.3, ndv));
+  float rim = pow(1.0 - abs(ndv), 3.0);
+  float diff = max(0.0, dot(n, uLight));
+  float spec = pow(max(0.0, dot(reflect(-uLight, n), v)), 28.0);
+  float shimmer = 0.78 + 0.22 * sin(uTime * (1.5 + aSeed * 4.0) + aSeed * 80.0);
+  float lum = (uLook.x + uLook.y * diff + uLook.z * spec + uLook.w * rim) * facing * shimmer;
+  vColor = aColor * (lum + uGlow * 2.0 + uImplode * 4.0);
+
+  float dist = max(-mv.z, 0.05);
+  float px = aSize * uSizeK * uProj / dist;
+  gl_PointSize = max(px, 1.0);
+  vAlpha = min(1.0, px / 1.2) * (1.0 - smoothstep(0.85, 1.0, uImplode));
+}`
+
 const SHOCK_VERT = /* glsl */ `
 uniform float uProj;
 uniform float uShock;
@@ -214,14 +261,84 @@ export async function createEntry(reduced: boolean) {
   fieldPts.material = new THREE.ShaderMaterial({ vertexShader: FIELD_VERT, fragmentShader: DOT_FRAG, uniforms: fieldU, ...additive })
   scene.add(fieldPts)
 
-  // ---- emblem -------------------------------------------------------------------
+  // ---- emblem: a glass orb of points with the crow's head inside -----------------
   const R = 1.75
   const emblem = new THREE.Group()
   scene.add(emblem)
-  const st = await svgStamp(symbolSvg, 640)
-  const sym = new Cloud(12)
-  stamp(sym, st, R * 2, { count: fx.entry.symbol, depth: 0.32, edge: 0.78, size: [0.011, 0.022], tint: (r) => (r < 0.62 ? C.white : r < 0.9 ? C.pale : C.blue), glow: 0.95 })
-  const symPts = sym.build()
+  const orbU = {
+    ...shared,
+    uGlow: { value: 0 },
+    uImplode: { value: 0 },
+    uLight: { value: new THREE.Vector3(-0.5, 0.6, 0.65).normalize() },
+  }
+  /** look: ambient, diffuse, highlight, rim. */
+  const orbPart = (c: Cloud, look: [number, number, number, number], head = 0, mid = new THREE.Vector3(), half = 0) => {
+    const pts = c.build()
+    const u = { ...orbU, uHead: { value: head }, uHeadMid: { value: mid }, uHeadHalf: { value: half }, uLook: { value: new THREE.Vector4(...look) } }
+    pts.material = new THREE.ShaderMaterial({ vertexShader: ORB_VERT, fragmentShader: DOT_FRAG, uniforms: u, ...additive })
+    return pts
+  }
+  const silver = (r: number) => (r < 0.7 ? C.white : r < 0.93 ? C.pale : C.blue)
+
+  // The shell: an even spread over the sphere; seen in perspective, the limb gathers into a bright edge.
+  const shell = new Cloud(12)
+  const shellN = n(fx.entry.orb)
+  for (let i = 0; i < shellN; i++) {
+    const y = 1 - (2 * (i + 0.5)) / shellN
+    const rr = Math.sqrt(1 - y * y)
+    const a = i * 2.399963 + shell.rand() * 0.02
+    const k = R * (1 + (shell.rand() - 0.5) * 0.012)
+    shell.add(Math.cos(a) * rr * k, y * k, Math.sin(a) * rr * k, silver(shell.rand()), 0.007 + shell.rand() * 0.008, 0.75 + shell.rand() * 0.4)
+  }
+  // Glass: a faint face, the light gathered at the limb and in the highlight.
+  emblem.add(orbPart(shell, [0.02, 0.05, 1.2, 1.7]))
+
+  // The emblem's notched coin ring, as a dashed band wrapped round the orb.
+  const band = new Cloud(16)
+  const dashes = 12
+  for (let i = 0, k = n(fx.entry.orb * 0.45); i < k; i++) {
+    const t = band.rand()
+    const cell = t * dashes - Math.floor(t * dashes)
+    if (cell > 0.86) continue
+    const a = t * Math.PI * 2
+    const lat = (band.rand() - 0.5) * 0.24
+    const rr = R * 1.015 * (1 + (band.rand() - 0.5) * 0.01)
+    const edge = Math.abs(lat) > 0.1 || cell < 0.03 || cell > 0.83
+    band.add(Math.cos(a) * Math.cos(lat) * rr, Math.sin(lat) * rr, Math.sin(a) * Math.cos(lat) * rr, band.rand() < 0.85 ? C.white : C.pale, 0.008 + band.rand() * 0.008, edge ? 1.5 : 1)
+  }
+  const bandPts = orbPart(band, [1.5, 1.2, 2, 1])
+  const bandHolder = new THREE.Group()
+  bandHolder.rotation.set(0.95, 0, 0.18)
+  bandHolder.add(bandPts)
+  emblem.add(bandHolder)
+
+  // A faint orbit ring, wider and tipped the other way.
+  const orbit = new Cloud(17)
+  for (let i = 0, k = n(2600); i < k; i++) {
+    const a = orbit.rand() * Math.PI * 2
+    const rr = R * 1.24 + (orbit.rand() - 0.5) * 0.02
+    orbit.add(Math.cos(a) * rr, (orbit.rand() - 0.5) * 0.015, Math.sin(a) * rr, orbit.rand() < 0.75 ? C.white : C.blue, 0.006 + orbit.rand() * 0.006, 0.7)
+  }
+  const orbitPts = orbPart(orbit, [0.5, 0.3, 1, 0.3])
+  const orbitHolder = new THREE.Group()
+  orbitHolder.rotation.set(-0.25, 0, -0.38)
+  orbitHolder.add(orbitPts)
+  emblem.add(orbitHolder)
+
+  // The crow's head inside: the emblem's head, extruded into a solid sculpture.
+  const st = await svgStamp(symbolSvg.replace(/<circle[^>]*\/>/, ''), 640)
+  const box = R * 2.55 // the 64-unit viewBox; the head spans ~37 of it, about 1.5R wide
+  const depth = R * 0.42
+  const at = new THREE.Vector3(-((38.1 - 32) / 64) * box, ((34.15 - 32) / 64) * box, depth / 2)
+  const head = new Cloud(18)
+  stamp(head, st, box, { count: fx.entry.symbol, depth, edge: 0.92, size: [0.008, 0.016], tint: silver, glow: 1 }, at)
+  // Turned back toward the camera (the orb is at three-quarters), so his profile reads.
+  const headHolder = new THREE.Group()
+  headHolder.rotation.set(-0.12, 0.36, 0)
+  headHolder.add(orbPart(head, [1.3, 1.4, 1.8, 1.2], 1, new THREE.Vector3(0, 0, 0), depth / 2))
+  emblem.add(headHolder)
+
+  // Cursor bookkeeping for the vortex ring.
   const symU = {
     ...shared,
     uMouse: { value: new THREE.Vector2(9, 9) },
@@ -230,10 +347,8 @@ export async function createEntry(reduced: boolean) {
     uGlow: { value: 0 },
     uImplode: { value: 0 },
     uForm: { value: 1 },
-    uRadius: { value: R * 0.98 },
+    uRadius: { value: 99 },
   }
-  symPts.material = new THREE.ShaderMaterial({ vertexShader: SYMBOL_VERT, fragmentShader: DOT_FRAG, uniforms: symU, ...additive })
-  emblem.add(symPts)
 
   // The ring that forms around it during the vortex.
   const ringCloud = new Cloud(13)
@@ -243,7 +358,7 @@ export async function createEntry(reduced: boolean) {
     ringCloud.add(Math.cos(a) * rr, Math.sin(a) * rr, (ringCloud.rand() - 0.5) * 0.08, ringCloud.rand() < 0.3 ? C.pale : C.white, 0.012 + ringCloud.rand() * 0.016, 0.9)
   }
   const ringPts = ringCloud.build()
-  const ringU = { ...symU, uForm: { value: 0 }, uGlow: { value: 0 }, uRadius: { value: 99 } }
+  const ringU = { ...symU, uForm: { value: 0 }, uGlow: { value: 0 } }
   ringPts.material = new THREE.ShaderMaterial({ vertexShader: SYMBOL_VERT, fragmentShader: DOT_FRAG, uniforms: ringU, ...additive })
   const ringHolder = new THREE.Group()
   ringHolder.rotation.set(1.15, 0, 0.3)
@@ -256,8 +371,8 @@ export async function createEntry(reduced: boolean) {
     c.width = c.height = 256
     const g = c.getContext('2d')!
     const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128)
-    grad.addColorStop(0, 'rgba(150,190,255,0.12)')
-    grad.addColorStop(0.35, 'rgba(47,123,255,0.05)')
+    grad.addColorStop(0, 'rgba(190,210,255,0.07)')
+    grad.addColorStop(0.35, 'rgba(47,123,255,0.028)')
     grad.addColorStop(1, 'rgba(2,3,8,0)')
     g.fillStyle = grad
     g.fillRect(0, 0, 256, 256)
@@ -315,6 +430,8 @@ export async function createEntry(reduced: boolean) {
   let spinAngle = 0
   let travel = 0
   const ndcV = new THREE.Vector3()
+  const lightRest = new THREE.Vector3(-0.5, 0.6, 0.65).normalize()
+  const lightAim = new THREE.Vector3()
   const all = [fieldU, symU, ringU]
 
   return {
@@ -357,6 +474,13 @@ export async function createEntry(reduced: boolean) {
       // Held still: turned a little away and tipped toward the viewer, so its
       // depth shows along the right and top edges.
       emblem.rotation.set(0.3, -0.5 + spinAngle, 0.04)
+      // The band and the orbit ring drift slowly round the still orb.
+      bandPts.rotation.y = -t * 0.12
+      orbitPts.rotation.y = t * 0.07
+      // Key light: upper left at rest, leaning toward the cursor.
+      if (mouse && state.vortex === 0) lightAim.set(mouse.x * 1.3, mouse.y * 1.3, 0.75).normalize()
+      else lightAim.copy(lightRest)
+      orbU.uLight.value.lerp(lightAim, 1 - Math.exp(-dt / 0.25)).normalize()
       ringHolder.rotation.z = t * 0.6 + state.spin * 8
       halo.material.opacity = (1 - state.implode) * (1 + state.spin * 1.5)
 
@@ -367,8 +491,8 @@ export async function createEntry(reduced: boolean) {
       }
       symU.uCenter.value.set(ndcV.x, ndcV.y)
       fieldU.uVortex.value = state.vortex
-      symU.uGlow.value = state.spin
-      symU.uImplode.value = state.implode
+      orbU.uGlow.value = state.spin
+      orbU.uImplode.value = state.implode
       ringU.uForm.value = state.ring
       ringU.uGlow.value = state.spin
       ringU.uImplode.value = state.implode

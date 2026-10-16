@@ -365,7 +365,7 @@ function onStage(emblem: Stamp, { openVideo }: SceneDeps): Stage {
     id: 'stage',
     scene,
     camera: { pos: V(0.95, 1.5, 5.6), target: V(0.95, 1.15, 0), fov: 40 },
-    crow: { pos: V(0, 0, 0), rotY: 0.08, clip: 'cheering' },
+    crow: { pos: V(0, 0, 0), rotY: 0.08, clip: 'clapping' },
     clickables,
   }
 }

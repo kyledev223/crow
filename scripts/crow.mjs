@@ -33,7 +33,7 @@ const OUT = join(root, 'public', 'assets', 'crow', 'crow.glb')
 /** Mixamo export name (lower case, no extension) → slug used by the site. */
 const RENAMES = {
   'sitting idle': 'sitting-idle',
-  cheering: 'cheering',
+  clapping: 'clapping',
   walking: 'walking',
   'breathing idle': 'idle',
   'reaching out': 'reaching',
