@@ -6,3 +6,4 @@ dist
 # Reference images: for comparison only, never part of the site or the repo
 reference-entry.png
 crow-pixel-medium.png
+reference/
