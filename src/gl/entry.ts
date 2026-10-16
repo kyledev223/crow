@@ -10,7 +10,7 @@ import { C, stamp, svgStamp } from './shapes'
  * At rest: a deep star field orbiting the emblem like a galaxy seen almost
  * edge-on, inner stars faster (near stars move more with the cursor, and the
  * cursor pushes them aside), around the emblem, built from thousands of
- * points, turning slowly in 3D with a shimmer; its rim brightens on the side
+ * points, held still at a three-quarter angle with a shimmer; its rim brightens on the side
  * facing the cursor.
  *
  * Everything the enter sequence animates lives in `state` (boot.ts drives it):
@@ -356,10 +356,11 @@ export async function createEntry(reduced: boolean) {
       camera.lookAt(0, 0, 0)
       camera.updateProjectionMatrix()
 
-      // Emblem: a slow 3D turn at rest, spinning up during the vortex.
-      spinAngle += dt * (0.22 + state.spin * state.spin * 14)
-      // A slow full turn, nodding up and down as it goes, with a little roll.
-      emblem.rotation.set(reduced ? 0 : Math.sin(t * 0.17) * 0.42, reduced ? 0 : spinAngle, reduced ? 0 : Math.sin(t * 0.11 + 1) * 0.12)
+      // Emblem: still at rest, spinning up during the vortex.
+      // Still at rest; it only spins once the enter sequence spins it up.
+      spinAngle += dt * state.spin * state.spin * 14
+      // Held at a three-quarter angle, tipped back a little, so it reads clearly in 3D.
+      emblem.rotation.set(-0.22, 0.5 + spinAngle, 0.06)
       ringHolder.rotation.z = t * 0.6 + state.spin * 8
       halo.material.opacity = (1 - state.implode) * (1 + state.spin * 1.5)
 
