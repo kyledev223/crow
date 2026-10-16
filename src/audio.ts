@@ -519,6 +519,83 @@ class Music {
     window.setTimeout(() => out.disconnect(), 800)
   }
 
+  /**
+   * Enter sequence: a low riser, filtered noise plus two detuned saws
+   * sweeping up over `seconds`. Straight to the speakers (the music fades
+   * in underneath). Silent unless the music is on.
+   */
+  riser(seconds: number) {
+    const ctx = this.ctx
+    if (this.muted || !ctx) return
+    const t = ctx.currentTime + 0.02
+    const out = ctx.createGain()
+    out.gain.setValueAtTime(0.0001, t)
+    out.gain.exponentialRampToValueAtTime(0.32, t + seconds * 0.92)
+    out.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.08)
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.Q.value = 6
+    lp.frequency.setValueAtTime(120, t)
+    lp.frequency.exponentialRampToValueAtTime(2400, t + seconds)
+    lp.connect(out).connect(ctx.destination)
+    const noise = ctx.createBufferSource()
+    noise.buffer = this.noise
+    noise.loop = true
+    const ng = ctx.createGain()
+    ng.gain.value = 0.5
+    noise.connect(ng).connect(lp)
+    noise.start(t)
+    noise.stop(t + seconds + 0.1)
+    for (const detune of [-14, 9]) {
+      const o = ctx.createOscillator()
+      o.type = 'sawtooth'
+      o.detune.value = detune
+      o.frequency.setValueAtTime(41, t)
+      o.frequency.exponentialRampToValueAtTime(165, t + seconds)
+      const g = ctx.createGain()
+      g.gain.value = 0.22
+      o.connect(g).connect(lp)
+      o.start(t)
+      o.stop(t + seconds + 0.1)
+    }
+    window.setTimeout(() => out.disconnect(), (seconds + 0.4) * 1000)
+  }
+
+  /** Enter sequence: the bass hit on the shockwave. Silent unless the music is on. */
+  impact() {
+    const ctx = this.ctx
+    if (this.muted || !ctx) return
+    const t = ctx.currentTime + 0.01
+    const out = ctx.createGain()
+    out.gain.value = 0.9
+    out.connect(ctx.destination)
+    const o = ctx.createOscillator()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(110, t)
+    o.frequency.exponentialRampToValueAtTime(32, t + 0.45)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(1, t + 0.008)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3)
+    o.connect(g).connect(out)
+    o.start(t)
+    o.stop(t + 1.35)
+    // A short burst of filtered noise for the crack on top.
+    const n = ctx.createBufferSource()
+    n.buffer = this.noise
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'lowpass'
+    bp.frequency.setValueAtTime(3000, t)
+    bp.frequency.exponentialRampToValueAtTime(200, t + 0.4)
+    const ng = ctx.createGain()
+    ng.gain.setValueAtTime(0.35, t)
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.45)
+    n.connect(bp).connect(ng).connect(out)
+    n.start(t)
+    n.stop(t + 0.5)
+    window.setTimeout(() => out.disconnect(), 1800)
+  }
+
   /** Dev helper: renders each track through the full chain and reports levels in dBFS. */
   async levels() {
     await this.calibrate()
@@ -735,16 +812,18 @@ if (import.meta.env.DEV) (window as unknown as { __music: Music }).__music = mus
 
 /** Wires the persistent corner control to the engine. */
 export function initSoundControl() {
-  const name = document.getElementById('sndName')!
-  const label = document.getElementById('sndLabel')!
+  const marquee = document.getElementById('sndMarquee')!
   const toggle = document.getElementById('sndToggle')!
   document.getElementById('sndPrev')!.addEventListener('click', () => music.prev())
   document.getElementById('sndNext')!.addEventListener('click', () => music.next())
   toggle.addEventListener('click', () => music.toggle())
   const buttons = document.querySelectorAll<HTMLButtonElement>('.sound button')
   music.onChange(({ muted, track, available }) => {
-    name.textContent = track
-    label.textContent = !available ? 'No audio here' : muted ? 'Music off' : 'Music on'
+    const label = !available ? 'No audio here' : muted ? 'Music off' : 'Music on'
+    // Two copies side by side, so the ticker can loop seamlessly.
+    const text = `${label} · ${track} — `
+    marquee.innerHTML = `<span>${text}</span><span aria-hidden="true">${text}</span>`
+    toggle.setAttribute('aria-label', `${label}, ${track}. Toggle music`)
     toggle.setAttribute('aria-pressed', String(!muted))
     toggle.classList.toggle('is-on', !muted)
     buttons.forEach((b) => (b.disabled = !available))

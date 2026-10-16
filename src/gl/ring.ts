@@ -1,6 +1,17 @@
 import * as THREE from 'three'
 import type { Meme } from '../memes'
-import { canvasTexture } from './plate'
+import { Cloud } from './points'
+import { C, roundedRect } from './shapes'
+
+function canvasTexture(w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) {
+  const cv = document.createElement('canvas')
+  cv.width = w
+  cv.height = h
+  draw(cv.getContext('2d')!, w, h)
+  const t = new THREE.CanvasTexture(cv)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
 
 const AUTO_SPEED = -4.5 // deg per second while idle
 const DRAG_SENS = 0.28 // deg per px
@@ -18,17 +29,17 @@ const FRAME_W = 0.92
 const FRAME_H = FRAME_W * 1.25
 
 /**
- * The meme ring, in 3D. Same feel as before it moved into WebGL: drag with
+ * The meme ring, in 3D, floating round the crow on screen 11. Drag with
  * inertia capped at a third of a turn, settles on the nearest frame, slow
  * auto-rotate when idle, arrow keys step one frame.
  *
  * Input is fed in from outside (pointer events and keys only reach it while
  * the memes screen is active).
  */
-export function createRing(memes: Meme[], reduced: boolean) {
+export function createRing(memes: Meme[], reduced: boolean, radiusScale = 1) {
   const n = memes.length
   const step = 360 / n
-  const radius = FRAME_W / 2 / Math.tan(Math.PI / n) + FRAME_W * 0.16
+  const radius = (FRAME_W / 2 / Math.tan(Math.PI / n) + FRAME_W * 0.16) * radiusScale
 
   const group = new THREE.Group()
   const spinner = new THREE.Group()
@@ -48,7 +59,12 @@ export function createRing(memes: Meme[], reduced: boolean) {
     c.textAlign = 'center'
     c.fillText('//////', w / 2, h / 2 + 6)
   })
-  const backMaterial = new THREE.MeshStandardMaterial({ map: backTexture, roughness: 0.9, emissive: 0xffffff, emissiveMap: backTexture, emissiveIntensity: 0.12 })
+  const backMaterial = new THREE.MeshBasicMaterial({ map: backTexture, color: new THREE.Color(0.35, 0.35, 0.4) })
+
+  // Every frame gets a glowing particle outline.
+  const frameCloud = new Cloud(1150)
+  roundedRect(frameCloud, new THREE.Vector3(), FRAME_W + 0.05, FRAME_H + 0.05, 0.03, { density: 180, jitter: 0.004, size: [0.006, 0.013], tint: (r) => (r < 0.6 ? C.pale : C.white), glow: 1.6 })
+  const frameTemplate = frameCloud.build({ twinkle: 0.4, scatter: 3 })
 
   const loader = new THREE.TextureLoader()
   const faces = memes.map((m, i) => {
@@ -58,12 +74,14 @@ export function createRing(memes: Meme[], reduced: boolean) {
     holder.rotation.y = i * step * RAD
     const face = new THREE.Mesh(
       new THREE.PlaneGeometry(FRAME_W, FRAME_H),
-      // Mostly self-lit so the memes stay readable whatever the scene lighting does.
-      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7, emissive: 0xffffff, emissiveMap: texture, emissiveIntensity: 0.55 }),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true }),
     )
     face.position.z = radius
-    face.castShadow = true
     face.userData.index = i
+    const outline = new THREE.Points(frameTemplate.geometry, frameTemplate.material)
+    outline.frustumCulled = false
+    outline.position.z = radius + 0.004
+    holder.add(outline)
     const back = new THREE.Mesh(new THREE.PlaneGeometry(FRAME_W, FRAME_H), backMaterial)
     back.position.z = radius - 0.004
     back.rotation.y = Math.PI
@@ -128,7 +146,12 @@ export function createRing(memes: Meme[], reduced: boolean) {
       // Frames dim as they turn away, on top of what the lighting already does.
       faces.forEach((f, i) => {
         const facing = Math.cos((i * step + rot) * RAD)
-        ;(f.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.25 + 0.85 * Math.max(0, facing) ** 1.5
+        const m = f.material as THREE.MeshBasicMaterial
+        const k = 0.15 + 0.6 * Math.max(0, facing) ** 1.5
+        m.color.setRGB(k, k, k)
+        // The frame passing straight in front of the crow goes see-through, so he stays visible.
+        const front = THREE.MathUtils.smoothstep(facing, 0.8, 0.985)
+        m.opacity = (0.25 + 0.7 * Math.max(0, facing)) * (1 - 0.72 * front)
       })
     },
 

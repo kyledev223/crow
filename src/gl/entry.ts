@@ -1,246 +1,336 @@
 import * as THREE from 'three'
+import symbolSvg from '../brand/symbol.svg?raw'
 import { fx } from '../fx-config'
+import { Cloud, n, seeded, shared } from './points'
+import { C, stamp, svgStamp } from './shapes'
 
 /**
- * The entry screen: a deep field of particles with a glowing particle sphere
- * and two orbiting rings at its centre. Rendered at full resolution (no
- * pixelation) with its own light treatment: grain, faint diagonal scanlines,
- * red/blue split toward the edges, and a soft bloom from additive glow.
+ * The entry screen and the enter sequence.
  *
- * The cursor shifts the camera (near particles move more than far ones) and
- * pushes nearby particles away. `exit()` flies the camera through the sphere.
+ * At rest: a deep star field (near stars move more with the cursor, and the
+ * cursor pushes them aside) around the emblem, built from thousands of
+ * points, turning slowly in 3D with a shimmer; its rim brightens on the side
+ * facing the cursor.
+ *
+ * Everything the enter sequence animates lives in `state` (boot.ts drives it):
+ *   vortex   the field spirals into the emblem
+ *   spin     the emblem spins up and brightens
+ *   ring     a ring of points forms around it
+ *   implode  emblem and ring collapse to a point
+ *   shock    a ring of light races outward
+ *   warp     hyperspace streak speed, 0–1
+ *   streaks  hyperspace streak opacity
  */
-const BLUE = new THREE.Color('#2F7BFF')
-const PALE = new THREE.Color('#8CB4FF')
-const WARM = new THREE.Color('#E8C98A')
-
-const POINT_VERT = /* glsl */ `
-attribute float aSize;
-attribute float aSeed;
-attribute vec3 aColor;
+const FIELD_VERT = /* glsl */ `
 uniform float uTime;
-uniform float uDrift;
-uniform float uScale;
-uniform vec2 uMouse;     // NDC
+uniform float uProj;
+uniform float uSizeK;
+uniform vec2 uMouse;
 uniform float uAspect;
 uniform float uPush;
+uniform float uVortex;
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aSeed;
 varying vec3 vColor;
-varying float vTwinkle;
+varying float vAlpha;
 void main() {
   vec3 p = position;
   float s = aSeed * 6.2831;
-  p += vec3(sin(uTime * 0.11 + s), cos(uTime * 0.13 + s * 1.7), sin(uTime * 0.07 + s * 2.3)) * uDrift;
+  p += vec3(sin(uTime * 0.11 + s), cos(uTime * 0.13 + s * 1.7), sin(uTime * 0.07 + s * 2.3)) * 0.3;
+
+  // Vortex: spiral into the emblem, nearer points first.
+  float v = clamp(uVortex * 1.7 - aSeed * 0.7, 0.0, 1.0);
+  v = v * v * (3.0 - 2.0 * v);
+  float r = length(p.xy);
+  float ang = atan(p.y, p.x) + v * (1.5 + 9.0 / (1.0 + r * 0.25));
+  r *= 1.0 - v;
+  p = vec3(cos(ang) * r, sin(ang) * r, mix(p.z, 0.0, v));
+
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
-  // Push away from the cursor, in screen space.
   vec2 ndc = gl_Position.xy / gl_Position.w;
   vec2 d = ndc - uMouse;
   d.x *= uAspect;
-  float fall = exp(-dot(d, d) / 0.035);
+  float fall = exp(-dot(d, d) / 0.03);
   ndc += normalize(d + 1e-5) * vec2(1.0 / uAspect, 1.0) * uPush * fall;
   gl_Position.xy = ndc * gl_Position.w;
-  gl_PointSize = aSize * uScale / max(-mv.z, 0.1);
-  vColor = aColor;
-  vTwinkle = 0.75 + 0.25 * sin(uTime * (1.0 + aSeed * 3.0) + s);
+
+  float dist = max(-mv.z, 0.05);
+  float px = aSize * uSizeK * uProj / dist;
+  gl_PointSize = max(px, 1.3);
+  vColor = aColor * (1.0 + v * 2.5);
+  vAlpha = (0.65 + 0.35 * sin(uTime * (1.0 + aSeed * 3.0) + s)) * min(1.0, px / 1.3) * (1.0 - smoothstep(0.75, 1.0, v));
 }`
 
-const POINT_FRAG = /* glsl */ `
-uniform float uOpacity;
+const DOT_FRAG = /* glsl */ `
 varying vec3 vColor;
-varying float vTwinkle;
+varying float vAlpha;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  float r = length(c);
-  if (r > 0.5) discard;
-  // Flat-topped dot with a soft edge: small points stay visible, big ones read as bokeh.
-  float a = smoothstep(0.5, 0.18, r) * vTwinkle * uOpacity;
-  gl_FragColor = vec4(vColor * a, a);
+  float r2 = dot(c, c) * 4.0;
+  if (r2 > 1.0) discard;
+  float soft = (1.0 - r2) * (1.0 - r2);
+  gl_FragColor = vec4(vColor * (soft * 0.8 + exp(-r2 * 9.0) * 0.5) * vAlpha, 1.0);
 }`
 
-const ENTRY_POST_FRAG = /* glsl */ `
-precision highp float;
-uniform sampler2D tScene;
-uniform vec2 uRes;
+const SYMBOL_VERT = /* glsl */ `
 uniform float uTime;
-uniform float uGrain;
-uniform float uScan;
-uniform float uSplit;
-uniform float uZoom;     // 0..1 radial zoom blur during the exit
-uniform float uFlash;    // 0..1 brightening at the end of the exit
-float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+uniform float uProj;
+uniform float uSizeK;
+uniform vec2 uMouse;      // NDC, or far away
+uniform vec2 uCenter;     // emblem centre in NDC
+uniform float uAspect;
+uniform float uGlow;
+uniform float uImplode;
+uniform float uForm;      // 0 = scattered, 1 = formed (used by the ring)
+uniform float uRadius;    // emblem radius in its own units
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aSeed;
+varying vec3 vColor;
+varying float vAlpha;
+vec3 hash3(float n) {
+  return fract(sin(vec3(n, n + 1.31, n + 2.77)) * vec3(43758.5453, 22578.1459, 19642.349)) * 2.0 - 1.0;
+}
 void main() {
-  vec2 uv = gl_FragCoord.xy / uRes;
-  vec2 dir = uv - 0.5;
-  float edge = dot(dir, dir) * 4.0;
-  vec2 off = dir * uSplit * edge / uRes.x * 2.0;
-  vec3 col = vec3(texture2D(tScene, uv + off).r, texture2D(tScene, uv).g, texture2D(tScene, uv - off).b);
-  if (uZoom > 0.001) {
-    vec3 acc = col;
-    for (int i = 1; i < 10; i++) {
-      float f = float(i) / 10.0 * uZoom * 0.35;
-      acc += texture2D(tScene, uv - dir * f).rgb;
-    }
-    col = acc / 10.0 * (1.0 + uZoom);
-  }
-  col += (hash(gl_FragCoord.xy + fract(uTime) * vec2(37.0, 91.0)) - 0.5) * uGrain;
-  float diag = step(mod(gl_FragCoord.x + gl_FragCoord.y, 4.0), 1.0);
-  col *= 1.0 - uScan * diag;
-  col *= 1.0 - 0.45 * edge;
-  col = mix(col, vec3(0.86, 0.91, 1.0), uFlash);
-  gl_FragColor = vec4(col, 1.0);
+  vec3 p = position;
+  float s = aSeed * 6.2831;
+  p += vec3(sin(uTime * 0.8 + s * 3.0), cos(uTime * 0.7 + s * 5.0), sin(uTime * 0.6 + s * 7.0)) * 0.006;
+  float f = clamp(uForm * 1.5 - aSeed * 0.5, 0.0, 1.0);
+  f = f * f * (3.0 - 2.0 * f);
+  p += hash3(aSeed * 77.0) * (1.0 - f) * 6.0;
+  p *= 1.0 - uImplode;
+
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+
+  // Rim toward the cursor: points near the edge of the coin, on the cursor's side.
+  vec2 ndc = gl_Position.xy / gl_Position.w;
+  vec2 toP = (ndc - uCenter) * vec2(uAspect, 1.0);
+  vec2 toM = (uMouse - uCenter) * vec2(uAspect, 1.0);
+  float rim = smoothstep(0.78, 0.95, length(position.xy) / uRadius);
+  float facing = max(0.0, dot(normalize(toP + 1e-5), normalize(toM + 1e-5)));
+  float near = exp(-max(0.0, length(toM) - length(toP)) * 1.2);
+  float lit = rim * pow(facing, 3.0) * near * step(length(toM), 4.0);
+
+  float dist = max(-mv.z, 0.05);
+  float px = aSize * uSizeK * uProj / dist;
+  gl_PointSize = max(px, 1.3);
+  float shimmer = 0.6 + 0.4 * sin(uTime * (2.0 + aSeed * 5.0) + s * 13.0);
+  vColor = aColor * (shimmer + lit * 3.2 + uGlow * 2.0 + uImplode * 4.0);
+  vAlpha = min(1.0, px / 1.3) * f * (1.0 - smoothstep(0.85, 1.0, uImplode));
 }`
 
-/** `scale` sets how big the points draw: the deep field is drawn bigger than the fine sphere. */
-function points(positions: number[], colors: THREE.Color[], sizes: number[], drift: number, scale = 1) {
-  const n = positions.length / 3
-  const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geo.setAttribute('aColor', new THREE.Float32BufferAttribute(colors.flatMap((c) => [c.r, c.g, c.b]), 3))
-  geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1))
-  geo.setAttribute('aSeed', new THREE.Float32BufferAttribute(Array.from({ length: n }, Math.random), 1))
-  const mat = new THREE.ShaderMaterial({
-    vertexShader: POINT_VERT,
-    fragmentShader: POINT_FRAG,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uTime: { value: 0 },
-      uDrift: { value: drift },
-      uScale: { value: 300 },
-      uMouse: { value: new THREE.Vector2(9, 9) },
-      uAspect: { value: 1 },
-      uPush: { value: 0 },
-      uOpacity: { value: 1 },
-      uSizeK: { value: scale },
-    },
-  })
-  return new THREE.Points(geo, mat)
+const SHOCK_VERT = /* glsl */ `
+uniform float uProj;
+uniform float uShock;
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aSeed;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  float r = mix(0.05, 16.0, pow(uShock, 0.7)) * (0.96 + aSeed * 0.08);
+  vec3 p = vec3(position.xy * r, position.z);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = max(aSize * uProj / max(-mv.z, 0.05) * (1.0 + uShock * 2.0), 1.5);
+  vColor = aColor * 3.0;
+  vAlpha = step(0.001, uShock) * (1.0 - smoothstep(0.35, 1.0, uShock));
+}`
+
+const STREAK_VERT = /* glsl */ `
+uniform float uTravel;
+uniform float uLen;
+uniform float uAlpha;
+uniform float uDepth;
+attribute float aTail;
+attribute float aSeed;
+attribute vec3 aColor;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  // Streaks live in camera space: x/y around the axis, z ahead of the camera.
+  float z = -0.6 - mod(position.z + uTravel * (0.8 + aSeed * 0.4), uDepth);
+  z -= aTail * uLen * (0.6 + aSeed * 0.8);
+  vec4 mv = modelViewMatrix * vec4(position.xy, z, 1.0);
+  gl_Position = projectionMatrix * mv;
+  float near = smoothstep(uDepth, uDepth * 0.4, -z);
+  vColor = aColor;
+  vAlpha = uAlpha * near * (1.0 - aTail * 0.85);
+}`
+
+const LINE_FRAG = /* glsl */ `
+varying vec3 vColor;
+varying float vAlpha;
+void main() { gl_FragColor = vec4(vColor * vAlpha, 1.0); }`
+
+const additive = {
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.CustomBlending,
+  blendSrc: THREE.OneFactor,
+  blendDst: THREE.OneFactor,
 }
 
-function fieldColour(r: number) {
-  if (r < 0.14) return BLUE.clone().multiplyScalar(0.8 + Math.random() * 0.6)
-  if (r < 0.26) return PALE.clone().multiplyScalar(0.7 + Math.random() * 0.5)
-  if (r < 0.28) return WARM.clone().multiplyScalar(0.8 + Math.random() * 0.4)
-  const g = 0.35 + Math.random() * 0.6
-  return new THREE.Color(g, g, g * 1.05)
-}
-
-export function createEntry(reduced: boolean) {
+export async function createEntry(reduced: boolean) {
   const scene = new THREE.Scene()
   scene.background = new THREE.Color('#020308')
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 120)
-  camera.position.set(0, 0, 10.5)
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 200)
+  camera.position.set(0, 0, 10)
+  scene.add(camera)
 
-  // Deep field
-  const fp: number[] = []
-  const fc: THREE.Color[] = []
-  const fs: number[] = []
-  for (let i = 0; i < fx.entry.field; i++) {
-    // A wide, flat band through the middle of the frame, thinning out above and below.
-    const z = -45 + Math.random() * 52
-    const spread = 14 + (z + 45) * 0.05
-    const gauss = Math.sqrt(-2 * Math.log(Math.random() + 1e-6)) * Math.cos(Math.random() * Math.PI * 2)
-    fp.push((Math.random() * 2 - 1) * spread * 2.4, gauss * spread * (Math.random() < 0.8 ? 0.22 : 0.6), z)
-    fc.push(fieldColour(Math.random()))
-    fs.push(Math.random() < 0.05 ? 2.6 + Math.random() * 3.5 : 0.7 + Math.random() * 1.3)
+  // ---- star field --------------------------------------------------------------
+  const field = new Cloud(11)
+  const rnd = field.rand
+  for (let i = 0, k = n(fx.entry.field); i < k; i++) {
+    const z = -60 + rnd() * 66
+    const spread = 12 + (z + 60) * 0.06
+    const g = Math.sqrt(-2 * Math.log(rnd() + 1e-6)) * Math.cos(rnd() * Math.PI * 2)
+    const r = rnd()
+    const col = r < 0.16 ? C.blue : r < 0.3 ? C.pale : r < 0.315 ? C.gold : C.white
+    field.add((rnd() * 2 - 1) * spread * 2.6, g * spread * (rnd() < 0.8 ? 0.22 : 0.6), z, col, rnd() < 0.04 ? 0.05 + rnd() * 0.06 : 0.018 + rnd() * 0.024, 0.5 + rnd() * 0.9)
   }
-  const field = points(fp, fc, fs, reduced ? 0 : 0.35)
-  scene.add(field)
-
-  // Sphere and rings
-  const orb = new THREE.Group()
-  scene.add(orb)
-  const sp: number[] = []
-  const sc: THREE.Color[] = []
-  const ss: number[] = []
-  const shell = Math.round(fx.entry.sphere * 0.62)
-  const golden = Math.PI * (3 - Math.sqrt(5))
-  for (let i = 0; i < shell; i++) {
-    const y = 1 - (i / (shell - 1)) * 2
-    const rr = Math.sqrt(1 - y * y)
-    const a = golden * i
-    const R = 1.25 * (1 + (Math.random() - 0.5) * 0.04)
-    sp.push(Math.cos(a) * rr * R, y * R, Math.sin(a) * rr * R)
-    sc.push(Math.random() < 0.12 ? PALE.clone() : new THREE.Color(0.9, 0.93, 1).multiplyScalar(0.75 + Math.random() * 0.5))
-    ss.push(0.9 + Math.random() * 1.3)
+  const fieldPts = field.build()
+  const fieldU = {
+    ...shared,
+    uMouse: { value: new THREE.Vector2(9, 9) },
+    uAspect: { value: 1 },
+    uPush: { value: reduced ? 0 : fx.entry.push },
+    uVortex: { value: 0 },
   }
-  const sphere = points(sp, sc, ss, reduced ? 0 : 0.008, 0.36)
-  orb.add(sphere)
+  fieldPts.material = new THREE.ShaderMaterial({ vertexShader: FIELD_VERT, fragmentShader: DOT_FRAG, uniforms: fieldU, ...additive })
+  scene.add(fieldPts)
 
-  const ring = (count: number, radius: number, width: number, tiltX: number, tiltZ: number) => {
-    const rp: number[] = []
-    const rc: THREE.Color[] = []
-    const rs: number[] = []
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2
-      const rad = radius + (Math.random() - 0.5) * width
-      rp.push(Math.cos(a) * rad, (Math.random() - 0.5) * width * 0.4, Math.sin(a) * rad)
-      rc.push(Math.random() < 0.2 ? PALE.clone().multiplyScalar(1.2) : new THREE.Color(1, 1, 1))
-      rs.push(1 + Math.random() * 1.5)
-    }
-    const r = points(rp, rc, rs, reduced ? 0 : 0.01, 0.42)
-    const holder = new THREE.Group()
-    holder.rotation.set(tiltX, 0, tiltZ)
-    holder.add(r)
-    orb.add(holder)
-    return r
+  // ---- emblem -------------------------------------------------------------------
+  const R = 1.75
+  const emblem = new THREE.Group()
+  scene.add(emblem)
+  const st = await svgStamp(symbolSvg, 640)
+  const sym = new Cloud(12)
+  stamp(sym, st, R * 2, { count: fx.entry.symbol, depth: 0.14, edge: 0.78, size: [0.011, 0.022], tint: (r) => (r < 0.62 ? C.white : r < 0.9 ? C.pale : C.blue), glow: 0.95 })
+  const symPts = sym.build()
+  const symU = {
+    ...shared,
+    uMouse: { value: new THREE.Vector2(9, 9) },
+    uCenter: { value: new THREE.Vector2() },
+    uAspect: { value: 1 },
+    uGlow: { value: 0 },
+    uImplode: { value: 0 },
+    uForm: { value: 1 },
+    uRadius: { value: R * 0.98 },
   }
-  const ringA = ring(Math.round(fx.entry.sphere * 0.24), 1.3, 0.3, 1.2, 0.35)
-  const ringB = ring(Math.round(fx.entry.sphere * 0.14), 1.32, 0.2, 0.25, -0.5)
+  symPts.material = new THREE.ShaderMaterial({ vertexShader: SYMBOL_VERT, fragmentShader: DOT_FRAG, uniforms: symU, ...additive })
+  emblem.add(symPts)
 
-  // Soft bloom behind the sphere
-  const glowTex = (() => {
+  // The ring that forms around it during the vortex.
+  const ringCloud = new Cloud(13)
+  for (let i = 0, k = n(3000); i < k; i++) {
+    const a = ringCloud.rand() * Math.PI * 2
+    const rr = R * 1.32 + (ringCloud.rand() - 0.5) * 0.12
+    ringCloud.add(Math.cos(a) * rr, Math.sin(a) * rr, (ringCloud.rand() - 0.5) * 0.08, ringCloud.rand() < 0.3 ? C.pale : C.white, 0.012 + ringCloud.rand() * 0.016, 0.9)
+  }
+  const ringPts = ringCloud.build()
+  const ringU = { ...symU, uForm: { value: 0 }, uGlow: { value: 0 }, uRadius: { value: 99 } }
+  ringPts.material = new THREE.ShaderMaterial({ vertexShader: SYMBOL_VERT, fragmentShader: DOT_FRAG, uniforms: ringU, ...additive })
+  const ringHolder = new THREE.Group()
+  ringHolder.rotation.set(1.15, 0, 0.3)
+  ringHolder.add(ringPts)
+  emblem.add(ringHolder)
+
+  // Soft halo behind the emblem.
+  const haloTex = (() => {
     const c = document.createElement('canvas')
     c.width = c.height = 256
     const g = c.getContext('2d')!
     const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128)
-    grad.addColorStop(0, 'rgba(160,195,255,0.28)')
-    grad.addColorStop(0.3, 'rgba(47,123,255,0.12)')
+    grad.addColorStop(0, 'rgba(150,190,255,0.12)')
+    grad.addColorStop(0.35, 'rgba(47,123,255,0.05)')
     grad.addColorStop(1, 'rgba(2,3,8,0)')
     g.fillStyle = grad
     g.fillRect(0, 0, 256, 256)
     return new THREE.CanvasTexture(c)
   })()
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }))
-  glow.scale.setScalar(6)
-  scene.add(glow)
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }))
+  halo.scale.setScalar(R * 4.5)
+  scene.add(halo)
 
-  const all = [field, sphere, ringA, ringB]
-  const post = new THREE.ShaderMaterial({
-    vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader: ENTRY_POST_FRAG,
-    depthTest: false,
-    uniforms: {
-      tScene: { value: null as THREE.Texture | null },
-      uRes: { value: new THREE.Vector2(1, 1) },
-      uTime: { value: 0 },
-      uGrain: { value: fx.entry.grain },
-      uScan: { value: fx.entry.scan },
-      uSplit: { value: fx.entry.split },
-      uZoom: { value: 0 },
-      uFlash: { value: 0 },
-    },
-  })
+  // ---- shockwave ------------------------------------------------------------------
+  const shock = new Cloud(14)
+  for (let i = 0, k = n(3000); i < k; i++) {
+    const a = shock.rand() * Math.PI * 2
+    shock.add(Math.cos(a), Math.sin(a), (shock.rand() - 0.5) * 0.2, shock.rand() < 0.4 ? C.pale : C.white, 0.02 + shock.rand() * 0.02)
+  }
+  const shockPts = shock.build()
+  const shockU = { uProj: shared.uProj, uShock: { value: 0 } }
+  shockPts.material = new THREE.ShaderMaterial({ vertexShader: SHOCK_VERT, fragmentShader: DOT_FRAG, uniforms: shockU, ...additive })
+  scene.add(shockPts)
 
+  // ---- hyperspace streaks (also carried into screen 01 while they slow down) --------
+  const streakCount = n(fx.entry.streaks)
+  const sp = new Float32Array(streakCount * 2 * 3)
+  const sTail = new Float32Array(streakCount * 2)
+  const sSeed = new Float32Array(streakCount * 2)
+  const sCol = new Float32Array(streakCount * 2 * 3)
+  const sr = seeded(15)
+  const DEPTH = 60
+  for (let i = 0; i < streakCount; i++) {
+    const a = sr() * Math.PI * 2
+    const rad = 0.35 + Math.pow(sr(), 0.7) * 7
+    const z = sr() * DEPTH
+    const seed = sr()
+    const c = sr() < 0.3 ? C.blue : sr() < 0.5 ? C.pale : C.white
+    const k = 1.2 + sr() * 1.8
+    for (let e = 0; e < 2; e++) {
+      const j = i * 2 + e
+      sp.set([Math.cos(a) * rad, Math.sin(a) * rad, z], j * 3)
+      sTail[j] = e
+      sSeed[j] = seed
+      sCol.set([c.r * k, c.g * k, c.b * k], j * 3)
+    }
+  }
+  const sg = new THREE.BufferGeometry()
+  sg.setAttribute('position', new THREE.BufferAttribute(sp, 3))
+  sg.setAttribute('aTail', new THREE.BufferAttribute(sTail, 1))
+  sg.setAttribute('aSeed', new THREE.BufferAttribute(sSeed, 1))
+  sg.setAttribute('aColor', new THREE.BufferAttribute(sCol, 3))
+  const streakU = { uTravel: { value: 0 }, uLen: { value: 0 }, uAlpha: { value: 0 }, uDepth: { value: DEPTH } }
+  const streaks = new THREE.LineSegments(sg, new THREE.ShaderMaterial({ vertexShader: STREAK_VERT, fragmentShader: LINE_FRAG, uniforms: streakU, ...additive }))
+  streaks.frustumCulled = false
+  camera.add(streaks)
+
+  const state = { vortex: 0, spin: 0, ring: 0, implode: 0, shock: 0, warp: 0, streaks: 0, fov: 55 }
   const view = { x: 0, y: 0 }
-  const state = { fly: 0, zoom: 0, flash: 0 }
+  let spinAngle = 0
+  let travel = 0
+  const ndcV = new THREE.Vector3()
+  const all = [fieldU, symU, ringU]
 
   return {
     scene,
     camera,
-    post,
     state,
+    streaks,
     resize(w: number, h: number) {
       camera.aspect = w / h
-      camera.fov = w / h < 0.8 ? 72 : 55
-      camera.updateProjectionMatrix()
-      for (const p of all) {
-        const u = (p.material as THREE.ShaderMaterial).uniforms
-        u.uAspect.value = w / h
-        u.uScale.value = h * 0.05 * u.uSizeK.value
+      for (const u of all) u.uAspect.value = w / h
+    },
+    /** While the streaks are carried over into screen 01, they ride along with its camera. */
+    followCamera(cam: THREE.Camera) {
+      if (streaks.parent === camera) return
+      streaks.position.copy(cam.position)
+      streaks.quaternion.copy(cam.quaternion)
+    },
+    /** Moves the streaks into another scene (for the settle into screen 01) or back home. */
+    carryStreaks(into: THREE.Scene | null) {
+      streaks.removeFromParent()
+      if (into) into.add(streaks)
+      else {
+        streaks.position.set(0, 0, 0)
+        streaks.quaternion.identity()
+        camera.add(streaks)
       }
-      post.uniforms.uRes.value.set(w, h)
     },
     /** mouse: NDC (−1..1) or null when there is no cursor. */
     update(time: number, dt: number, mouse: { x: number; y: number } | null, lean: { x: number; y: number }) {
@@ -248,28 +338,42 @@ export function createEntry(reduced: boolean) {
       const follow = 1 - Math.exp(-dt / 0.5)
       view.x += (lean.x - view.x) * follow
       view.y += (lean.y - view.y) * follow
-      // Fly-through: from 9 units out to straight through the sphere.
-      const z = 10.5 - state.fly * 12.5
-      camera.position.set(view.x * 1.6 * (1 - state.fly), view.y * 0.9 * (1 - state.fly), z)
-      camera.lookAt(0, 0, z - 10)
-      if (!reduced) {
-        orb.rotation.y = t * 0.12
-        orb.rotation.x = Math.sin(t * 0.07) * 0.15
-        ringA.parent!.rotation.y = t * 0.35
-        ringB.parent!.rotation.y = -t * 0.22
-      }
-      for (const p of all) {
-        const u = (p.material as THREE.ShaderMaterial).uniforms
-        u.uTime.value = t
-        if (mouse) u.uMouse.value.set(mouse.x, mouse.y)
+      const calm = 1 - Math.min(1, state.vortex * 2 + state.warp)
+      camera.position.set(view.x * 1.4 * calm, view.y * 0.8 * calm, 10)
+      camera.fov = state.fov + (camera.aspect < 0.8 ? 14 : 0)
+      camera.lookAt(0, 0, 0)
+      camera.updateProjectionMatrix()
+
+      // Emblem: a slow 3D turn at rest, spinning up during the vortex.
+      spinAngle += dt * (0.25 + state.spin * state.spin * 14)
+      emblem.rotation.set(reduced ? 0 : Math.sin(t * 0.21) * 0.18, reduced ? 0 : Math.sin(spinAngle) * 0.55 + state.spin * spinAngle * 0.2, 0)
+      ringHolder.rotation.z = t * 0.6 + state.spin * 8
+      halo.material.opacity = (1 - state.implode) * (1 + state.spin * 1.5)
+
+      ndcV.set(0, 0, 0).project(camera)
+      for (const u of all) {
+        if (mouse && state.vortex === 0) u.uMouse.value.set(mouse.x, mouse.y)
         else u.uMouse.value.set(9, 9)
-        u.uPush.value = reduced ? 0 : fx.entry.push
       }
-      post.uniforms.uTime.value = t
-      post.uniforms.uZoom.value = state.zoom
-      post.uniforms.uFlash.value = state.flash
+      symU.uCenter.value.set(ndcV.x, ndcV.y)
+      fieldU.uVortex.value = state.vortex
+      symU.uGlow.value = state.spin
+      symU.uImplode.value = state.implode
+      ringU.uForm.value = state.ring
+      ringU.uGlow.value = state.spin
+      ringU.uImplode.value = state.implode
+      shockU.uShock.value = state.shock
+    },
+    /** Hyperspace streaks: speed eases in, then out; length follows speed. Runs in both modes. */
+    tickStreaks(dt: number) {
+      const speed = state.warp * state.warp * 140
+      travel += speed * dt
+      streakU.uTravel.value = travel
+      streakU.uLen.value = 0.05 + speed * 0.045
+      streakU.uAlpha.value = state.streaks
+      streaks.visible = state.streaks > 0.001
     },
   }
 }
 
-export type Entry = ReturnType<typeof createEntry>
+export type Entry = Awaited<ReturnType<typeof createEntry>>
