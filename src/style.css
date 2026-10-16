@@ -404,8 +404,10 @@ mark {
 .entry > * {
   pointer-events: auto;
 }
+/* Enter on the emblem's centre line, the silent option under it, then the hint. */
 .entry__actions {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 26px;
 }
@@ -615,15 +617,60 @@ html.is-last .hint {
   color: var(--ink);
   border-color: var(--pale);
 }
-.music__toggle {
+/* The obvious one: says what it will do, fills blue while the music plays. */
+.music__power {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--pale);
+  border-radius: 10px;
+  background: none;
+  font: 600 0.66rem/1 var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.music__power:hover {
+  border-color: var(--ink);
+}
+.music.is-on .music__power {
+  border-color: transparent;
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(47, 123, 255, 0.45);
+}
+.music__icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.music__speaker {
+  fill: currentColor;
+}
+.music__waves,
+.music.is-on .music__cross {
+  display: none;
+}
+.music.is-on .music__waves {
+  display: inline;
+}
+.music__track {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 34px;
-  padding: 0 6px;
-  border: 0;
-  background: none;
-  cursor: pointer;
+  padding: 0 4px;
+  color: var(--ink-dim);
 }
 .eq {
   display: flex;
@@ -638,7 +685,7 @@ html.is-last .hint {
   transform-origin: bottom;
   transform: scaleY(0.35);
 }
-.music__toggle.is-on .eq i {
+.music.is-on .eq i {
   animation: eq 0.9s ease-in-out infinite alternate;
 }
 .eq i:nth-child(2) {
@@ -1165,8 +1212,9 @@ html.is-dragging .cursor__ring::before {
   .hint {
     display: none;
   }
-  .marquee {
-    width: 96px;
+  /* Room for the stop button and Buy on one row: the ticker waits for a wider screen. */
+  .music__track {
+    display: none;
   }
   .hud--br .ca {
     display: none;
@@ -1234,7 +1282,7 @@ html.is-native .screen {
 }
 @media (prefers-reduced-motion: reduce) {
   .marquee__in,
-  .music__toggle.is-on .eq i,
+  .music.is-on .eq i,
   .lightbox[open] {
     animation: none;
   }

@@ -814,18 +814,20 @@ if (import.meta.env.DEV) (window as unknown as { __music: Music }).__music = mus
 export function initSoundControl() {
   const marquee = document.getElementById('sndMarquee')!
   const toggle = document.getElementById('sndToggle')!
+  const label = document.getElementById('sndLabel')!
+  const pill = toggle.closest('.music')!
   document.getElementById('sndPrev')!.addEventListener('click', () => music.prev())
   document.getElementById('sndNext')!.addEventListener('click', () => music.next())
   toggle.addEventListener('click', () => music.toggle())
-  const buttons = document.querySelectorAll<HTMLButtonElement>('.sound button')
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.music button')
   music.onChange(({ muted, track, available }) => {
-    const label = !available ? 'No audio here' : muted ? 'Music off' : 'Music on'
+    // The button says what clicking it will do.
+    label.textContent = !available ? 'No audio' : muted ? 'Play music' : 'Stop music'
     // Two copies side by side, so the ticker can loop seamlessly.
-    const text = `${label} · ${track} — `
+    const text = `${track} — `
     marquee.innerHTML = `<span>${text}</span><span aria-hidden="true">${text}</span>`
-    toggle.setAttribute('aria-label', `${label}, ${track}. Toggle music`)
     toggle.setAttribute('aria-pressed', String(!muted))
-    toggle.classList.toggle('is-on', !muted)
+    pill.classList.toggle('is-on', !muted)
     buttons.forEach((b) => (b.disabled = !available))
   })
 }
