@@ -7,8 +7,9 @@ import { C, stamp, svgStamp } from './shapes'
 /**
  * The entry screen and the enter sequence.
  *
- * At rest: a deep star field (near stars move more with the cursor, and the
- * cursor pushes them aside) around the emblem, built from thousands of
+ * At rest: a deep star field orbiting the emblem like a galaxy seen almost
+ * edge-on, inner stars faster (near stars move more with the cursor, and the
+ * cursor pushes them aside), around the emblem, built from thousands of
  * points, turning slowly in 3D with a shimmer; its rim brightens on the side
  * facing the cursor.
  *
@@ -39,6 +40,11 @@ void main() {
   float s = aSeed * 6.2831;
   p += vec3(sin(uTime * 0.11 + s), cos(uTime * 0.13 + s * 1.7), sin(uTime * 0.07 + s * 2.3)) * 0.3;
 
+  // Orbit: every star circles the emblem's vertical axis, the inner ones faster.
+  float orbitR = length(p.xz);
+  float orbitA = atan(p.z, p.x) + uTime * (0.025 + 0.32 / (1.0 + orbitR * 0.3));
+  p.xz = vec2(cos(orbitA), sin(orbitA)) * orbitR;
+
   // Vortex: spiral into the emblem, nearer points first.
   float v = clamp(uVortex * 1.7 - aSeed * 0.7, 0.0, 1.0);
   v = v * v * (3.0 - 2.0 * v);
@@ -58,9 +64,10 @@ void main() {
 
   float dist = max(-mv.z, 0.05);
   float px = aSize * uSizeK * uProj / dist;
-  gl_PointSize = max(px, 1.3);
+  gl_PointSize = clamp(px, 1.3, 26.0);
   vColor = aColor * (1.0 + v * 2.5);
-  vAlpha = (0.65 + 0.35 * sin(uTime * (1.0 + aSeed * 3.0) + s)) * min(1.0, px / 1.3) * (1.0 - smoothstep(0.75, 1.0, v));
+  // Stars swinging round past the camera fade out instead of filling the screen.
+  vAlpha = (0.65 + 0.35 * sin(uTime * (1.0 + aSeed * 3.0) + s)) * min(1.0, px / 1.3) * (1.0 - smoothstep(0.75, 1.0, v)) * smoothstep(1.5, 5.0, dist);
 }`
 
 const DOT_FRAG = /* glsl */ `
@@ -185,14 +192,18 @@ export async function createEntry(reduced: boolean) {
   const field = new Cloud(11)
   const rnd = field.rand
   for (let i = 0, k = n(fx.entry.field); i < k; i++) {
-    const z = -60 + rnd() * 66
-    const spread = 12 + (z + 60) * 0.06
+    // A thin disc round the emblem, denser toward the middle, thicker toward the rim.
+    const radius = 3 + Math.sqrt(rnd()) * 52
+    const a = rnd() * Math.PI * 2
     const g = Math.sqrt(-2 * Math.log(rnd() + 1e-6)) * Math.cos(rnd() * Math.PI * 2)
+    const thick = (0.35 + radius * 0.05) * (rnd() < 0.8 ? 1 : 3)
     const r = rnd()
     const col = r < 0.16 ? C.blue : r < 0.3 ? C.pale : r < 0.315 ? C.gold : C.white
-    field.add((rnd() * 2 - 1) * spread * 2.6, g * spread * (rnd() < 0.8 ? 0.22 : 0.6), z, col, rnd() < 0.04 ? 0.05 + rnd() * 0.06 : 0.018 + rnd() * 0.024, 0.5 + rnd() * 0.9)
+    field.add(Math.cos(a) * radius, g * thick, Math.sin(a) * radius, col, rnd() < 0.04 ? 0.05 + rnd() * 0.06 : 0.018 + rnd() * 0.024, 0.5 + rnd() * 0.9)
   }
   const fieldPts = field.build()
+  // Tilted a touch, so the orbit reads as a slow sweep rather than straight across.
+  fieldPts.rotation.set(0.1, 0, -0.06)
   const fieldU = {
     ...shared,
     uMouse: { value: new THREE.Vector2(9, 9) },

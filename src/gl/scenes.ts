@@ -234,6 +234,24 @@ function hall(): Stage {
     line(c, V(0, 0.48, 0), V(0, 0.05, 0), { density: 500, jitter: 0.01, glow: 1.6 })
     ring(c, V(0, 0.03, 0), 0.2, { density: 380, jitter: 0.006, glow: 1.4 })
   }, { scatter: 2 })
+  // His desk, drawn the same way as the stool: a doubled top edge, four posts on little base rings.
+  const desk = new THREE.Group()
+  desk.rotation.y = -0.25 // squared up to him
+  scene.add(desk)
+  cloud(desk, 105, (c) => {
+    const W = 1.7
+    const D = 0.6
+    const Z = 0.72
+    const flat = new THREE.Euler(-Math.PI / 2, 0, 0)
+    roundedRect(c, V(0, 0.76, Z), W, D, 0.1, { density: 170, jitter: 0.005, size: [0.006, 0.014], glow: 0.95 }, flat)
+    roundedRect(c, V(0, 0.71, Z), W, D, 0.1, { density: 90, jitter: 0.005, size: [0.006, 0.012], glow: 0.6 }, flat)
+    for (const x of [-W / 2 + 0.12, W / 2 - 0.12]) {
+      for (const z of [Z - D / 2 + 0.1, Z + D / 2 - 0.1]) {
+        line(c, V(x, 0.71, z), V(x, 0.05, z), { density: 220, jitter: 0.006, size: [0.006, 0.013], glow: 0.85 })
+        ring(c, V(x, 0.03, z), 0.07, { density: 260, jitter: 0.004, size: [0.006, 0.012], glow: 0.8 })
+      }
+    }
+  }, { scatter: 2 })
   floorGlow(scene, V(0, 0, 0), 1.05, 1.1)
   motes(scene, 104, V(-8, 0, -9), V(8, 6, 3), 1400)
   return {
