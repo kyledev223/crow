@@ -9,6 +9,7 @@ import { lite } from '../lite'
 import type { ClipName, Crow } from './crow'
 import type { Entry } from './entry'
 import { builtThin, pointCount, shared } from './points'
+import { fitFov } from './frame'
 import { finalPass } from './post'
 
 export interface Clickable {
@@ -165,7 +166,7 @@ export function createEngine(canvas: HTMLCanvasElement, parts: { stages: Stage[]
       .addScaledVector(up, view.y * fx.parallax.lift + Math.sin(w * 1.3 + 1) * b * 0.6)
       .addScaledVector(fwd, state.dolly * 0.5)
     look.copy(tgt).addScaledVector(right, view.x * fx.parallax.shift * 0.25)
-    camera.fov = fov
+    camera.fov = portrait ? fov : fitFov(fov, width / height)
     camera.aspect = width / height
     camera.lookAt(look)
     camera.updateProjectionMatrix()
@@ -241,7 +242,7 @@ export function createEngine(canvas: HTMLCanvasElement, parts: { stages: Stage[]
 
     crow.update(dt, time)
     if (state.mode === 'entry') {
-      entry.update(time, dt, opts.finePointer && pointer.inside ? { x: pointer.x, y: pointer.y } : null, view)
+      entry.update(time, dt, opts.finePointer && pointer.inside ? { x: pointer.x, y: pointer.y } : null)
       renderPass.scene = entry.scene
       renderPass.camera = entry.camera
       setProj(entry.camera)

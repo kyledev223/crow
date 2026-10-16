@@ -10,6 +10,19 @@
     />
     <meta name="theme-color" content="#020308" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Desktop layout is designed in a 1920×940 frame (sizes in rem). Scaling the
+      // root font keeps the same proportions on every desktop screen. Phones keep 16px.
+      ;(function () {
+        var fit = function () {
+          var w = window.innerWidth
+          var h = window.innerHeight
+          document.documentElement.style.fontSize = w < 900 ? '' : 16 * Math.min(w / 1920, h / 940) + 'px'
+        }
+        fit()
+        window.addEventListener('resize', fit)
+      })()
+    </script>
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Share cards. Set VITE_SITE_URL in .env so the image URL is absolute. -->

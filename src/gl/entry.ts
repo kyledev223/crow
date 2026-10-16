@@ -1,17 +1,17 @@
 import * as THREE from 'three'
 import symbolSvg from '../brand/symbol.svg?raw'
 import { fx } from '../fx-config'
+import { fitFov } from './frame'
 import { Cloud, n, seeded, shared } from './points'
 import { C, stamp, svgStamp } from './shapes'
 
 /**
  * The entry screen and the enter sequence.
  *
- * At rest: a deep star field orbiting the emblem like a galaxy seen almost
- * edge-on, inner stars faster (near stars move more with the cursor, and the
- * cursor pushes them aside), around the emblem, built from thousands of
- * points, held still at a three-quarter angle with a shimmer; its rim brightens on the side
- * facing the cursor.
+ * At rest: a deep star field orbiting the emblem, inner stars faster (the
+ * cursor pushes nearby stars aside). The emblem, built from thousands of
+ * points, holds perfectly still at an angle, with a shimmer; its rim
+ * brightens on the side facing the cursor.
  *
  * Everything the enter sequence animates lives in `state` (boot.ts drives it):
  *   vortex   the field spirals into the emblem
@@ -103,7 +103,6 @@ vec3 hash3(float n) {
 void main() {
   vec3 p = position;
   float s = aSeed * 6.2831;
-  p += vec3(sin(uTime * 0.8 + s * 3.0), cos(uTime * 0.7 + s * 5.0), sin(uTime * 0.6 + s * 7.0)) * 0.006;
   float f = clamp(uForm * 1.5 - aSeed * 0.5, 0.0, 1.0);
   f = f * f * (3.0 - 2.0 * f);
   p += hash3(aSeed * 77.0) * (1.0 - f) * 6.0;
@@ -313,7 +312,6 @@ export async function createEntry(reduced: boolean) {
   camera.add(streaks)
 
   const state = { vortex: 0, spin: 0, ring: 0, implode: 0, shock: 0, warp: 0, streaks: 0, fov: 55 }
-  const view = { x: 0, y: 0 }
   let spinAngle = 0
   let travel = 0
   const ndcV = new THREE.Vector3()
@@ -345,22 +343,20 @@ export async function createEntry(reduced: boolean) {
       }
     },
     /** mouse: NDC (−1..1) or null when there is no cursor. */
-    update(time: number, dt: number, mouse: { x: number; y: number } | null, lean: { x: number; y: number }) {
+    update(time: number, dt: number, mouse: { x: number; y: number } | null) {
       const t = reduced ? 0 : time
-      const follow = 1 - Math.exp(-dt / 0.5)
-      view.x += (lean.x - view.x) * follow
-      view.y += (lean.y - view.y) * follow
-      const calm = 1 - Math.min(1, state.vortex * 2 + state.warp)
-      camera.position.set(view.x * 1.4 * calm, view.y * 0.8 * calm, 10)
-      camera.fov = state.fov + (camera.aspect < 0.8 ? 14 : 0)
+      // A fixed camera: the emblem holds perfectly still; only the stars orbit.
+      camera.position.set(0, 0, 10)
+      camera.fov = camera.aspect < 0.8 ? state.fov + 14 : fitFov(state.fov, camera.aspect, 95)
       camera.lookAt(0, 0, 0)
       camera.updateProjectionMatrix()
 
       // Emblem: still at rest, spinning up during the vortex.
       // Still at rest; it only spins once the enter sequence spins it up.
       spinAngle += dt * state.spin * state.spin * 14
-      // Held at a three-quarter angle, tipped back a little, so it reads clearly in 3D.
-      emblem.rotation.set(-0.22, 0.5 + spinAngle, 0.06)
+      // Held still: turned a little away and tipped toward the viewer, so its
+      // depth shows along the right and top edges.
+      emblem.rotation.set(0.3, -0.5 + spinAngle, 0.04)
       ringHolder.rotation.z = t * 0.6 + state.spin * 8
       halo.material.opacity = (1 - state.implode) * (1 + state.spin * 1.5)
 
