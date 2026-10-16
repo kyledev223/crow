@@ -196,7 +196,8 @@ export async function createEntry(reduced: boolean) {
     const radius = 3 + Math.sqrt(rnd()) * 52
     const a = rnd() * Math.PI * 2
     const g = Math.sqrt(-2 * Math.log(rnd() + 1e-6)) * Math.cos(rnd() * Math.PI * 2)
-    const thick = (0.35 + radius * 0.05) * (rnd() < 0.8 ? 1 : 3)
+    // Most stars fill the whole view; the rest thicken a band through the middle.
+    const thick = 0.4 + radius * (rnd() < 0.62 ? 0.3 : 0.07)
     const r = rnd()
     const col = r < 0.16 ? C.blue : r < 0.3 ? C.pale : r < 0.315 ? C.gold : C.white
     field.add(Math.cos(a) * radius, g * thick, Math.sin(a) * radius, col, rnd() < 0.04 ? 0.05 + rnd() * 0.06 : 0.018 + rnd() * 0.024, 0.5 + rnd() * 0.9)
@@ -220,7 +221,7 @@ export async function createEntry(reduced: boolean) {
   scene.add(emblem)
   const st = await svgStamp(symbolSvg, 640)
   const sym = new Cloud(12)
-  stamp(sym, st, R * 2, { count: fx.entry.symbol, depth: 0.14, edge: 0.78, size: [0.011, 0.022], tint: (r) => (r < 0.62 ? C.white : r < 0.9 ? C.pale : C.blue), glow: 0.95 })
+  stamp(sym, st, R * 2, { count: fx.entry.symbol, depth: 0.32, edge: 0.78, size: [0.011, 0.022], tint: (r) => (r < 0.62 ? C.white : r < 0.9 ? C.pale : C.blue), glow: 0.95 })
   const symPts = sym.build()
   const symU = {
     ...shared,
@@ -356,8 +357,9 @@ export async function createEntry(reduced: boolean) {
       camera.updateProjectionMatrix()
 
       // Emblem: a slow 3D turn at rest, spinning up during the vortex.
-      spinAngle += dt * (0.25 + state.spin * state.spin * 14)
-      emblem.rotation.set(reduced ? 0 : Math.sin(t * 0.21) * 0.18, reduced ? 0 : Math.sin(spinAngle) * 0.55 + state.spin * spinAngle * 0.2, 0)
+      spinAngle += dt * (0.22 + state.spin * state.spin * 14)
+      // A slow full turn, nodding up and down as it goes, with a little roll.
+      emblem.rotation.set(reduced ? 0 : Math.sin(t * 0.17) * 0.42, reduced ? 0 : spinAngle, reduced ? 0 : Math.sin(t * 0.11 + 1) * 0.12)
       ringHolder.rotation.z = t * 0.6 + state.spin * 8
       halo.material.opacity = (1 - state.implode) * (1 + state.spin * 1.5)
 

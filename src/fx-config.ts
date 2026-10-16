@@ -83,9 +83,9 @@ export const fx = {
   /** The entry screen. */
   entry: {
     /** Points in the star field. */
-    field: 26000,
+    field: 82000,
     /** Points in the symbol. */
-    symbol: 9000,
+    symbol: 11000,
     /** How hard the cursor pushes nearby stars. */
     push: 0.07,
     /** Hyperspace streaks. */
