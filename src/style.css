@@ -233,6 +233,30 @@ mark {
   display: contents;
 }
 
+/* The X (Twitter) link in the corner: a round icon button the height of the CA pill. */
+.xlink {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(7, 10, 22, 0.72);
+  color: var(--ink);
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+.xlink:hover {
+  border-color: var(--pale);
+  color: #fff;
+}
+.xlink svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: currentColor;
+}
+
 .ca {
   display: inline-flex;
   align-items: center;
@@ -1158,6 +1182,12 @@ html.is-dragging .cursor__ring::before {
   }
   .hud--br .ca {
     display: none;
+  }
+  /* No room beside the music pill: X sits just above Buy. */
+  .hud--br {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
   }
   .hud--br .btn {
     min-height: 40px;
