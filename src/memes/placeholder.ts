@@ -100,8 +100,8 @@ function art(c: Ctx, motif: Motif, s: Scheme) {
       ring(c, 200, 286, 88, s.acc, 5)
       c.fillStyle = s.bg
       c.textAlign = 'center'
-      c.font = '76px Anton, Impact, sans-serif'
-      c.fillText('CAW', 200, 313)
+      c.font = '64px Anton, Impact, sans-serif'
+      c.fillText('CROW', 200, 308)
       c.textAlign = 'left'
       star(c, 292, 196, 40, s.acc)
       break

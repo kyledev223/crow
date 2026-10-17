@@ -69,7 +69,7 @@ export const SCREENS: ScreenDef[] = [
     sub: 'Coupon Crows. Paid on schedule.',
     side: 'left',
     html: `
-      <p class="eyebrow hero__eyebrow" data-in><span class="slashes" aria-hidden="true">//////</span> THE WIRE · $CAW</p>
+      <p class="eyebrow hero__eyebrow" data-in><span class="slashes" aria-hidden="true">//////</span> THE WIRE · $CROW</p>
       <h1 class="display hero__title" aria-label="Coupon Crow">${lines('COUPON', 'CROW')}</h1>`,
   },
   {
@@ -183,12 +183,12 @@ export const SCREENS: ScreenDef[] = [
   {
     id: 'token',
     name: 'The token',
-    sub: '$CAW. A community token concept. Nothing to buy yet.',
+    sub: '$CROW. The community token of the flock, live on Solana.',
     side: 'left',
     html: `
-      ${eyebrow('THE TOKEN · CONCEPT')}
-      ${head('HOLD $CAW.', 'COLLECT SHINY', 'THINGS.')}
-      ${lede('$CAW is a community token concept: a mascot, a running joke about patience, and a flock that likes things that glitter. There is no contract yet and nothing to buy.')}
+      ${eyebrow('THE TOKEN · LIVE ON SOLANA')}
+      ${head('HOLD $CROW.', 'COLLECT SHINY', 'THINGS.')}
+      ${lede('$CROW is a community token: a mascot, a running joke about patience, and a flock that likes things that glitter.')}
       <div class="actions" data-in>
         <span class="slot" data-buy="gold"></span>
         <span class="slot" data-ca="named"></span>

@@ -87,7 +87,7 @@ async function generate() {
 
     ${text(mono, '//////', 64, 88, 22, ACCENT, { tracking: -0.08 })}
     ${text(mono, 'COUPON CROWS', 150, 88, 22, INK, { tracking: 0.06 })}
-    ${text(mono, '$CAW', W - 64, 88, 22, INK, { anchor: 'end', tracking: 0.06, opacity: 0.66 })}
+    ${text(mono, '$CROW', W - 64, 88, 22, INK, { anchor: 'end', tracking: 0.06, opacity: 0.66 })}
 
     ${text(anton, 'COUPON', 58, 318, 214, INK)}
     ${text(anton, 'CROWS', 58, 508, 214, INK)}

@@ -1,4 +1,4 @@
-# Coupon Crows ($CAW)
+# Coupon Crows ($CROW)
 
 A twelve-screen, full-viewport site for a **fictional** community art project. No real token, contract, company or people are involved. Every quote is from a made-up bird.
 
@@ -93,7 +93,7 @@ public/assets/crow/     crow.glb, written by npm run crow
 | 02 | `#name` | Why the name | — | "COUPON CROWS" in giant 3D points, slowly turning; a coin rising at the bottom edge |
 | 03 | `#stage` | On stage | clapping | spotlight cone, mic stand, gold-dust audience, a dot-matrix screen |
 | 04 | `#post` | The post | walking, side view | candlestick chart and a line across the back; the floor scrolls under him |
-| 05 | `#record` | On the record | idle, behind a glowing ledger rail | drifting strips of "$CAW" and "COUPON CROWS" |
+| 05 | `#record` | On the record | idle, behind a glowing ledger rail | drifting strips of "$CROW" and "COUPON CROWS" |
 | 06 | `#foryou` | For you | reaching, close up | a tunnel of rings, a halo behind his head |
 | 07 | `#onchain` | On-chain | looking-up, small, from behind | a beam from above and the emblem, huge and tilted |
 | 08 | `#cheers` | Cheers | toast, close up, with a coupe of gold fizz | fireworks in white, blue and gold |

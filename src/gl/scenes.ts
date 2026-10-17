@@ -431,7 +431,7 @@ function driftingText(scene: THREE.Scene, seed: number, phrases: string[][], row
 
 function onRecord(): Stage {
   const scene = baseScene()
-  driftingText(scene, 501, [['$CAW'], ['COUPON CROWS']], 6, [goldMix, sparkle, blueMix])
+  driftingText(scene, 501, [['$CROW'], ['COUPON CROWS']], 6, [goldMix, sparkle, blueMix])
   cloud(scene, 520, (c) => floorGrid(c, -9, 9, -10, 3, 9, 14, 13, 0.5), { scatter: 4, depthFade: [9, 14] })
   // The ledger bar: a glowing rail at his waist on two posts.
   cloud(scene, 521, (c) => {
@@ -657,7 +657,7 @@ function phone(seed: number) {
 
 function askTheCrow(): Stage {
   const scene = baseScene()
-  driftingText(scene, 901, [['WEN COIN?'], ['WHY THE SUIT?'], ['CAW?'], ['ASK THE CROW'], ['IS IT SHINY?'], ['$CAW']], 6, [sparkle, goldMix, blueMix])
+  driftingText(scene, 901, [['WEN COIN?'], ['WHY THE SUIT?'], ['CAW?'], ['ASK THE CROW'], ['IS IT SHINY?'], ['$CROW']], 6, [sparkle, goldMix, blueMix])
   cloud(scene, 920, (c) => floorGrid(c, -9, 9, -10, 3, 9, 14, 13, 0.5), { scatter: 4, depthFade: [9, 14] })
   floorGlow(scene, V(0, 0, 0), 0.85, 1.2)
   motes(scene, 921, V(-7, 0, -6), V(7, 5, 3), 1000)

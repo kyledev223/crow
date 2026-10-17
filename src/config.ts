@@ -12,7 +12,7 @@ export interface SiteConfig {
   ticker: string
   /** Full contract address, e.g. "0xAbc…". `null` = not shown. */
   contractAddress: string | null
-  /** Where "Buy $CAW" goes. `null` = not shown. */
+  /** Where "Buy $CROW" goes. `null` = not shown. */
   buyUrl: string | null
   /** Where "Explorer" goes. `null` = not shown. */
   explorerUrl: string | null
@@ -24,14 +24,15 @@ export interface SiteConfig {
 
 export const config: SiteConfig = {
   name: 'Coupon Crows',
-  ticker: '$CAW',
-  contractAddress: null,
-  buyUrl: null,
-  explorerUrl: null,
+  ticker: '$CROW',
+  contractAddress: '9mDrSegcjj5QJP1Zf27XwzM7ScrE95RPRQdrPApzpump',
+  buyUrl: 'https://pump.fun/coin/9mDrSegcjj5QJP1Zf27XwzM7ScrE95RPRQdrPApzpump',
+  explorerUrl: 'https://solscan.io/token/9mDrSegcjj5QJP1Zf27XwzM7ScrE95RPRQdrPApzpump',
   communityUrl: '#',
-  followUrl: '#',
+  followUrl: 'https://x.com/couponcrowfun',
   stats: [
-    { label: 'Token', value: 'Coupon Crows · $CAW' },
+    { label: 'Token', value: 'Coupon Crows · $CROW' },
     { label: 'Supply', value: '1,000,000,000' },
+    { label: 'Chain', value: 'Solana' },
   ],
 }

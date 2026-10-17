@@ -15,7 +15,7 @@ function toast(message: string) {
 /**
  * The contract address control, three ways:
  *   data-ca          corner pill: "CA 0x12…abcd COPY"
- *   data-ca="named"  "$CAW CA COPY" (screen 10)
+ *   data-ca="named"  "$CROW CA COPY" (screen 10)
  *   data-ca="full"   the whole address with a COPY button (screen 12)
  */
 function contractControl(host: HTMLElement) {
